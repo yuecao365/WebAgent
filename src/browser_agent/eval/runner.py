@@ -281,6 +281,7 @@ def run_task(
         "usage": asdict(result.usage),
         "cache_hit_rate": round(cache_hit_rate(asdict(result.usage)), 4),
         "sections": result.sections,
+        "replayed_calls": result.replayed_calls,
         "usd": result.cost_usd,
         "seconds": round(result.seconds, 2),
         "reset_seconds": round(reset_seconds, 2),
@@ -288,8 +289,13 @@ def run_task(
     }
 
 
-def run(config: RunConfig, root: Path, confirm_paid: bool = False) -> Path:
-    """Run every selected task and return the run directory."""
+def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bool = False) -> Path:
+    """Run every selected task and return the run directory.
+
+    dev_cache replays stored model replies for requests seen before, so repeating an
+    unchanged task while developing costs nothing. Results that count are run without
+    it; the run's config.json records which way it was.
+    """
     entries = select_tasks(config, root)
     if not entries:
         raise SystemExit("the config selects no tasks")
@@ -301,7 +307,11 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False) -> Path:
     load_dotenv(root / ".env")
     os.environ["BH_TELEMETRY"] = "0"
     results = root / "results"
-    llm = client_from_env(results, parallel_tools=config.switches.multi_action)
+    llm = client_from_env(
+        results,
+        parallel_tools=config.switches.multi_action,
+        response_cache=results / "response_cache" if dev_cache else None,
+    )
     env = ShoppingAdmin(SiteConfig.from_env())
     data_dir = Path(os.environ.get("BROWSER_AGENT_DATA_DIR", "").strip() or root / "data")
     browser_path = os.environ.get("BROWSER_PATH", "").strip()
@@ -315,6 +325,7 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False) -> Path:
                 "pricing_usd_per_mtok": asdict(llm.pricing),
                 "site_image": env.site.image,
                 "git_commit": _git_commit(root),
+                "dev_response_cache": dev_cache,
             },
             indent=2,
         ),
@@ -372,9 +383,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=f"allow a run of more than {SMOKE_TASK_LIMIT} tasks (needs the user's go-ahead)",
     )
+    parser.add_argument(
+        "--dev-cache",
+        action="store_true",
+        help="reuse stored model replies for unchanged requests; for development, "
+        "not for results that count",
+    )
     args = parser.parse_args(argv)
     config = RunConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
-    run_dir = run(config, Path.cwd(), confirm_paid=args.confirm_paid)
+    run_dir = run(config, Path.cwd(), confirm_paid=args.confirm_paid, dev_cache=args.dev_cache)
     print(f"results: {run_dir}")
     return 0
 

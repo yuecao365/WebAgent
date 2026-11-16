@@ -8,6 +8,7 @@ tested offline with a scripted provider.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import random
@@ -302,6 +303,8 @@ class OpenAIProvider:
         # Some compatible endpoints reject the newer request fields. Minimal mode
         # leaves them out; it is switched on after the first such rejection.
         self._minimal = minimal
+        # Models without a reasoning setting reject the field; then only it is dropped.
+        self._no_effort = False
 
     def complete(
         self,
@@ -310,19 +313,7 @@ class OpenAIProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
     ) -> Reply:
-        try:
-            response = self._send(self._request(system, messages, tools, options))
-        except ModelError as exc:
-            rejected = exc.status_code in (400, 422) and not self._minimal
-            if isinstance(exc, TransientModelError) or not rejected:
-                raise
-            # Possibly a field this endpoint does not know. Try once without the
-            # optional fields and stay in that mode if it works.
-            response = self._send(
-                self._request(system, messages, tools, options, minimal=True), first_error=exc
-            )
-            self._minimal = True
-
+        response = self._send_with_fallback(system, messages, tools, options)
         choice = response.choices[0]
         calls = tuple(
             ToolCall(
@@ -340,15 +331,49 @@ class OpenAIProvider:
             stop_reason=choice.finish_reason or "",
         )
 
+    def _send_with_fallback(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+    ) -> Any:
+        """Send the request; when a field is rejected, send it again with less.
+
+        First without the effort setting, then without every optional field. The
+        mode that works is kept, so later calls are not rejected again. What the
+        model is shown is the same in every mode.
+        """
+        modes = [(self._no_effort, self._minimal)]
+        if options.effort and not self._no_effort and not self._minimal:
+            modes.append((True, False))
+        if not self._minimal:
+            modes.append((True, True))
+        first_error: ModelError | None = None
+        for no_effort, minimal in modes:
+            request = self._request(system, messages, tools, options, minimal, no_effort)
+            try:
+                response = self._send(request, first_error)
+            except TransientModelError:
+                raise
+            except ModelError as exc:
+                if exc.status_code not in (400, 422) or (no_effort, minimal) == modes[-1]:
+                    raise
+                first_error = first_error or exc
+                continue
+            self._no_effort, self._minimal = no_effort, minimal
+            return response
+        raise first_error or ModelError("no request mode left to try")
+
     def _request(
         self,
         system: str,
         messages: Sequence[Message],
         tools: Sequence[ToolSpec],
         options: CallOptions,
-        minimal: bool | None = None,
+        minimal: bool,
+        no_effort: bool,
     ) -> dict[str, Any]:
-        minimal = self._minimal if minimal is None else minimal
         request: dict[str, Any] = {
             "model": self._model,
             "messages": [{"role": "system", "content": system}, *map(self._encode, messages)],
@@ -361,7 +386,7 @@ class OpenAIProvider:
             request["parallel_tool_calls"] = options.parallel_tools
             if options.cache_key:
                 request["prompt_cache_key"] = options.cache_key
-            if options.effort:
+            if options.effort and not no_effort:
                 request["reasoning_effort"] = options.effort
         return request
 
@@ -606,6 +631,21 @@ class AnthropicProvider:
 # ---------------------------------------------------------------------------
 
 
+# A step's reply is a tool call or a few; this leaves room for a long answer or note.
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
+# The lowest setting most reasoning models accept. Picking an element on a page that
+# is spelled out in text rarely needs more; providers drop it when a model has none.
+DEFAULT_EFFORT = "low"
+
+
+def _env_effort() -> str | None:
+    """LLM_REASONING_EFFORT: a level name, or "none" to send no setting at all."""
+    raw = os.environ.get("LLM_REASONING_EFFORT", "").strip().lower()
+    if not raw:
+        return DEFAULT_EFFORT
+    return None if raw in ("none", "off", "default") else raw
+
+
 def _env_float(name: str) -> float | None:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else None
@@ -621,8 +661,9 @@ class LLMConfig:
     base_url: str | None
     pricing: Pricing
     budget_usd: float
-    max_output_tokens: int | None = None
+    max_output_tokens: int | None = DEFAULT_MAX_OUTPUT_TOKENS
     openai_minimal: bool = False
+    effort: str | None = DEFAULT_EFFORT
 
     @classmethod
     def from_env(cls) -> LLMConfig:
@@ -659,8 +700,9 @@ class LLMConfig:
                 cache_write=_env_float("LLM_PRICE_CACHE_WRITE_PER_MTOK"),
             ),
             budget_usd=float(os.environ["BUDGET_USD"]),
-            max_output_tokens=int(max_output) if max_output else None,
+            max_output_tokens=int(max_output) if max_output else DEFAULT_MAX_OUTPUT_TOKENS,
             openai_minimal=os.environ.get("LLM_OPENAI_MINIMAL", "").strip() == "1",
+            effort=_env_effort(),
         )
 
 
@@ -700,6 +742,75 @@ class Completion:
     attempts: int
     # Estimated prompt tokens per section; they sum to the measured prompt tokens.
     sections: dict[str, int] = field(default_factory=dict)
+    # The reply came from the development response cache: no call was made or paid.
+    from_cache: bool = False
+
+
+def _message_record(message: Message) -> dict[str, Any]:
+    """A message as plain data, for hashing a request."""
+    if isinstance(message, AssistantMessage):
+        calls = [[call.id, call.name, call.raw_arguments] for call in message.tool_calls]
+        return {"role": "assistant", "text": message.text, "calls": calls}
+    record: dict[str, Any] = {"parts": [[part.section, part.text] for part in message.parts]}
+    if isinstance(message, ToolMessage):
+        record.update(role="tool", id=message.tool_call_id, error=message.is_error)
+    else:
+        record["role"] = "user"
+    return record
+
+
+class ResponseCache:
+    """Replies stored by the hash of the full request, for development reruns.
+
+    Running an unchanged task again then costs nothing. It is off unless asked for:
+    a cached reply is not a new sample of the model, so results that count must
+    come from real calls.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+
+    @staticmethod
+    def key(
+        model: str,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+    ) -> str:
+        request = {
+            "model": model,
+            "system": system,
+            "tools": [[spec.name, spec.description, spec.parameters] for spec in tools],
+            "messages": [_message_record(message) for message in messages],
+            # The cache key routes requests; it does not change the reply.
+            "options": [options.max_output_tokens, options.parallel_tools, options.effort],
+        }
+        encoded = json.dumps(request, sort_keys=True, ensure_ascii=False).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    def get(self, key: str) -> Reply | None:
+        path = self.directory / f"{key}.json"
+        if not path.exists():
+            return None
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        return Reply(
+            text=stored["text"],
+            tool_calls=tuple(ToolCall(**call) for call in stored["tool_calls"]),
+            usage=Usage(**stored["usage"]),
+            stop_reason=stored["stop_reason"],
+        )
+
+    def put(self, key: str, reply: Reply) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        stored = {
+            "text": reply.text,
+            "tool_calls": [asdict(call) for call in reply.tool_calls],
+            "usage": asdict(reply.usage),
+            "stop_reason": reply.stop_reason,
+        }
+        path = self.directory / f"{key}.json"
+        path.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
 
 
 def _tools_chars(tools: Sequence[ToolSpec]) -> int:
@@ -780,7 +891,9 @@ class LLMClient:
         labels: dict[str, Any] | None = None,
         parallel_tools: bool = False,
         effort: str | None = None,
+        cache: ResponseCache | None = None,
     ) -> None:
+        self._cache = cache
         self._provider = provider
         self.pricing = pricing
         self.ledger = ledger
@@ -808,6 +921,19 @@ class LLMClient:
         self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
     ) -> Completion:
         """One model call. Raises BudgetExceededError before spending past the cap."""
+        options = CallOptions(
+            max_output_tokens=self._max_output_tokens,
+            cache_key=self._cache_key(),
+            parallel_tools=self._parallel_tools,
+            effort=self._effort,
+        )
+        cache_key = None
+        if self._cache is not None:
+            cache_key = ResponseCache.key(self.model, system, messages, tools, options)
+            stored = self._cache.get(cache_key)
+            if stored is not None:
+                return self._finish(stored, system, messages, tools, 0.0, 0, from_cache=True)
+
         reserve = self.pricing.cost(
             Usage(
                 input_tokens=estimate_tokens(system, messages, tools),
@@ -815,12 +941,6 @@ class LLMClient:
             )
         )
         self.ledger.check(reserve)
-        options = CallOptions(
-            max_output_tokens=self._max_output_tokens,
-            cache_key=self._cache_key(),
-            parallel_tools=self._parallel_tools,
-            effort=self._effort,
-        )
 
         started = self._clock()
         attempt = 0
@@ -835,8 +955,23 @@ class LLMClient:
                 # Exponential backoff with jitter, capped at 30 seconds.
                 self._sleep(min(2.0**attempt, 30.0) * (0.5 + random.random() / 2))
         seconds = self._clock() - started
-        cost = self.pricing.cost(reply.usage)
+        if self._cache is not None and cache_key is not None:
+            self._cache.put(cache_key, reply)
+        return self._finish(reply, system, messages, tools, seconds, attempt, from_cache=False)
+
+    def _finish(
+        self,
+        reply: Reply,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        seconds: float,
+        attempts: int,
+        from_cache: bool,
+    ) -> Completion:
+        """Account for a reply and log it. A cached reply is logged at no cost."""
         usage = reply.usage
+        cost = 0.0 if from_cache else self.pricing.cost(usage)
         prompt_tokens = usage.input_tokens + usage.cached_input_tokens + usage.cache_write_tokens
         sections = section_tokens(section_chars(system, messages, tools), prompt_tokens)
         self.ledger.record(
@@ -847,16 +982,17 @@ class LLMClient:
                 "usage": asdict(usage),
                 "sections": sections,
                 "cost_usd": cost,
-                "attempts": attempt,
+                "attempts": attempts,
                 "seconds": round(seconds, 3),
+                "from_response_cache": from_cache,
             }
         )
-        return Completion(
-            reply=reply, cost_usd=cost, seconds=seconds, attempts=attempt, sections=sections
-        )
+        return Completion(reply, cost, seconds, attempts, sections, from_cache)
 
 
-def client_from_env(results_dir: Path, parallel_tools: bool = False) -> LLMClient:
+def client_from_env(
+    results_dir: Path, parallel_tools: bool = False, response_cache: Path | None = None
+) -> LLMClient:
     """Build the client for a paid run from .env settings."""
     config = LLMConfig.from_env()
     ledger = SpendLedger(results_dir, config.budget_usd)
@@ -867,6 +1003,8 @@ def client_from_env(results_dir: Path, parallel_tools: bool = False) -> LLMClien
         model=config.model,
         max_output_tokens=config.max_output_tokens,
         parallel_tools=parallel_tools,
+        effort=config.effort,
+        cache=ResponseCache(response_cache) if response_cache is not None else None,
     )
 
 
@@ -883,6 +1021,7 @@ __all__ = [
     "Pricing",
     "Provider",
     "Reply",
+    "ResponseCache",
     "SpendLedger",
     "ToolCall",
     "ToolMessage",

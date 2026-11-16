@@ -20,6 +20,8 @@ from browser_agent.harness.llm import (
     OpenAIProvider,
     Part,
     Pricing,
+    Reply,
+    ResponseCache,
     SpendLedger,
     ToolCall,
     ToolMessage,
@@ -234,6 +236,77 @@ def test_each_call_logs_its_token_split_and_sections(tmp_path):
     assert entry["sections"]["history"] > entry["sections"]["observation"] > 0
 
 
+# -- call options and the response cache ------------------------------------------
+
+
+def test_the_client_passes_its_settings_to_the_provider(tmp_path):
+    client, provider, _, _ = make_client(
+        tmp_path, [reply()], max_output_tokens=900, parallel_tools=True, effort="low"
+    )
+
+    client.labelled(run="smoke", task_id=7).complete("s", [UserMessage("hi")], [])
+
+    assert provider.calls[0]["options"] == CallOptions(
+        max_output_tokens=900,
+        cache_key="browser-agent-smoke-7",
+        parallel_tools=True,
+        effort="low",
+    )
+
+
+def test_a_cached_reply_costs_nothing_and_makes_no_call(tmp_path):
+    cache = ResponseCache(tmp_path / "cache")
+    answer = reply(text="done")
+    first_client, first_provider, _, _ = make_client(tmp_path, [answer], cache=cache)
+    paid = first_client.complete("system", _conversation(), [])
+
+    second_client, second_provider, ledger, _ = make_client(tmp_path, [], cache=cache)
+    free = second_client.complete("system", _conversation(), [])
+
+    assert len(first_provider.calls) == 1
+    assert second_provider.calls == []
+    assert free.reply == paid.reply
+    assert free.from_cache
+    assert not paid.from_cache
+    assert free.cost_usd == 0
+    assert ledger.total_usd == pytest.approx(paid.cost_usd)
+    lines = (tmp_path / "results" / "spend.jsonl").read_text(encoding="utf-8").splitlines()
+    assert [json.loads(line)["from_response_cache"] for line in lines] == [False, True]
+
+
+def test_a_different_request_is_not_served_from_the_cache(tmp_path):
+    cache = ResponseCache(tmp_path / "cache")
+    client, provider, _, _ = make_client(tmp_path, [reply(text="a"), reply(text="b")], cache=cache)
+
+    client.complete("system", _conversation(), [])
+    changed = [*_conversation()[:-1], ToolMessage("c1", "another page")]
+    other = client.complete("system", changed, [])
+
+    assert len(provider.calls) == 2
+    assert other.reply.text == "b"
+    assert not other.from_cache
+
+
+def test_the_cache_is_off_unless_given(tmp_path):
+    client, provider, _, _ = make_client(tmp_path, [reply(), reply()])
+
+    client.complete("system", _conversation(), [])
+    client.complete("system", _conversation(), [])
+
+    assert len(provider.calls) == 2
+
+
+def test_cached_replies_keep_their_tool_calls(tmp_path):
+    cache = ResponseCache(tmp_path / "cache")
+    call = ToolCall("c9", "click", {"ref": 4}, '{"ref": 4}')
+    stored = Reply("", (call,), Usage(10, 20, 0, 5), "tool_calls")
+
+    cache.put("k", stored)
+
+    assert cache.get("k") == stored
+    assert cache.get("missing") is None
+
+
 # -- tool-call parsing --------------------------------------------------------
 
 
@@ -375,22 +448,42 @@ def _status_error(module, name, status):
     return getattr(module, name)("failed", response=response, body=None)
 
 
-def test_openai_falls_back_to_a_plain_request_when_a_field_is_rejected():
+def test_openai_drops_the_effort_setting_first_when_a_request_is_rejected():
     rejected = _status_error(openai, "BadRequestError", 400)
     provider, recorder = _openai_provider(rejected, _openai_response())
+    options = CallOptions(500, "task-7", False, "low")
 
-    result = provider.complete("s", HISTORY, TOOLS, CallOptions(500, "task-7", False, "low"))
-    provider.complete("s", HISTORY, TOOLS, CallOptions(500, "task-7", False, "low"))
+    result = provider.complete("s", HISTORY, TOOLS, options)
+    provider.complete("s", HISTORY, TOOLS, options)
 
     assert result.tool_calls[0].name == "click"
     first, second, third = recorder.requests
-    assert "prompt_cache_key" in first
-    assert "prompt_cache_key" not in second
-    assert second["max_tokens"] == 500
-    # It stays plain afterwards instead of being rejected on every call.
-    assert "prompt_cache_key" not in third
-    # What the model is shown is the same either way.
-    assert second["messages"] == first["messages"]
+    assert first["reasoning_effort"] == "low"
+    # Only the effort went; strict tools and the cache key are still there.
+    assert "reasoning_effort" not in second
+    assert second["prompt_cache_key"] == "task-7"
+    assert second["tools"][0]["function"]["strict"] is True
+    # It stays that way afterwards instead of being rejected on every call.
+    assert "reasoning_effort" not in third
+    assert len(recorder.requests) == 3
+
+
+def test_openai_falls_back_to_a_plain_request_when_that_is_not_enough():
+    rejected = _status_error(openai, "BadRequestError", 400)
+    provider, recorder = _openai_provider(rejected, rejected, _openai_response())
+    options = CallOptions(500, "task-7", False, "low")
+
+    provider.complete("s", HISTORY, TOOLS, options)
+    provider.complete("s", HISTORY, TOOLS, options)
+
+    first, _, third, fourth = recorder.requests
+    for request in (third, fourth):
+        assert request["max_tokens"] == 500
+        assert "strict" not in request["tools"][0]["function"]
+        for name in ("prompt_cache_key", "reasoning_effort", "parallel_tool_calls"):
+            assert name not in request
+    # What the model is shown is the same in every mode.
+    assert third["messages"] == first["messages"]
 
 
 def test_openai_reports_the_first_rejection_when_the_plain_request_fails_too():
@@ -567,6 +660,7 @@ ALL_VARIABLES = (
     "LLM_PRICE_CACHE_WRITE_PER_MTOK",
     "LLM_MAX_OUTPUT_TOKENS",
     "LLM_OPENAI_MINIMAL",
+    "LLM_REASONING_EFFORT",
 )
 
 
@@ -589,6 +683,21 @@ def test_config_from_env(clean_env):
     assert config.budget_usd == 5.0
     assert config.base_url is None
     assert "test-key" not in repr(config)
+    # Output is capped and reasoning is at its lowest unless .env says otherwise.
+    assert config.max_output_tokens == 4096
+    assert config.effort == "low"
+
+
+def test_output_cap_and_effort_can_be_set_in_env(clean_env):
+    for name, value in ENV.items():
+        clean_env.setenv(name, value)
+    clean_env.setenv("LLM_MAX_OUTPUT_TOKENS", "1500")
+    clean_env.setenv("LLM_REASONING_EFFORT", "none")
+
+    config = LLMConfig.from_env()
+
+    assert config.max_output_tokens == 1500
+    assert config.effort is None
 
 
 def test_claude_models_default_to_the_anthropic_provider(clean_env):

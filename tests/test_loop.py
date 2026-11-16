@@ -397,6 +397,24 @@ def test_prompt_sections_are_totalled_per_task(tmp_path):
     assert calls[1]["sections"]["history"] > 0
 
 
+def test_replayed_calls_are_counted_and_cost_nothing(tmp_path):
+    from browser_agent.harness.llm import ResponseCache
+
+    cache = ResponseCache(tmp_path / "cache")
+    script = [reply(call("click", ref=1)), reply(call("finish", **FINISH_OK))]
+    first_client, _, _, _ = make_client(tmp_path, script, cache=cache)
+    first = AgentLoop(first_client, FakeExecutor(), EventLog()).run("goal")
+
+    second_client, provider, _, _ = make_client(tmp_path, [], cache=cache)
+    second = AgentLoop(second_client, FakeExecutor(), EventLog()).run("goal")
+
+    assert first.replayed_calls == 0
+    assert second.replayed_calls == 2
+    assert provider.calls == []
+    assert second.cost_usd == 0
+    assert second.finish == first.finish
+
+
 # -- several calls in one reply -------------------------------------------------
 
 MULTI = LoopConfig(multi_action=True)

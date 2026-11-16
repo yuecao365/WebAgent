@@ -31,6 +31,24 @@ uv run ruff check; uv run ruff format --check
 
    Results go to `results/<date>_<name>/`; every model call is logged in
    `results/spend.jsonl`. A run of more than 5 tasks needs `--confirm-paid`.
+   `--dev-cache` replays stored model replies for unchanged requests, so repeating a
+   task while developing costs nothing; do not use it for results that count.
+
+## Switches
+
+A config turns components on under `"switches"`; all are off by default.
+
+| Switch | Effect |
+|---|---|
+| `prune_observation` | Show only what can be acted on and what can be read; one line per table row |
+| `truncate_lists` | Show the first rows/options of a long run and count the rest |
+| `diff_observation` | While the page stays the same document, show only the changed lines |
+| `multi_action` | Run every tool call of a reply, stopping at a failure or a new page |
+
+`configs/smoke.json` runs with every switch off; `configs/smoke_optimized.json` turns
+on pruning, truncation and multi-action. The prompt layout itself (task, append-only
+history of calls with one-line results, then a tail with the current page, the
+working note and the step count) is not a switch.
 
 ## Layout
 
@@ -38,8 +56,9 @@ uv run ruff check; uv run ruff format --check
 src/browser_agent/
   browser/   session (browser-harness), observation, actions, network (HAR)
   harness/   loop, tools, llm (the only module that calls a model), events
+  context/   observe (pruned, truncated and diff views of a page)
   eval/      webarena (tasks, reset, evaluator, subset), runner
-configs/     subset.json (60 tasks), smoke.json, baseline.json
+configs/     subset.json (60 tasks), smoke.json, smoke_optimized.json, baseline.json
 scripts/     setup notes, check_env.py, build_subset.py, run_eval.py
 tests/       offline tests with saved fixtures
 ```

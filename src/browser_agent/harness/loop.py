@@ -148,6 +148,8 @@ class RunResult:
     error: str | None = None
     # Estimated prompt tokens by section, summed over the task's calls.
     sections: dict[str, int] = field(default_factory=dict)
+    # Model calls answered from the development response cache, at no cost.
+    replayed_calls: int = 0
 
 
 def _call_key(calls: Sequence[ToolCall]) -> str:
@@ -178,6 +180,7 @@ class AgentLoop:
         self._usage = Usage()
         self._cost = 0.0
         self._sections: dict[str, int] = {}
+        self._replayed = 0
         self._steps = 0
         self._started = 0.0
 
@@ -302,6 +305,7 @@ class AgentLoop:
         self._cost += completion.cost_usd
         for name, tokens in completion.sections.items():
             self._sections[name] = self._sections.get(name, 0) + tokens
+        self._replayed += completion.from_cache
         self._events.append(
             "model_call",
             step=self._steps,
@@ -420,6 +424,7 @@ class AgentLoop:
             steps=self._steps,
             usage=self._usage,
             sections=dict(self._sections),
+            replayed_calls=self._replayed,
             cost_usd=self._cost,
             seconds=self._clock() - self._started,
             error=error,

@@ -11,6 +11,7 @@ __pycache__/
 # run artifacts too large or private for git
 results/**/traces/
 results/**/screenshots/
+results/response_cache/
 *.har
 data/
 
