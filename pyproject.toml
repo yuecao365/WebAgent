@@ -29,7 +29,10 @@ packages = ["src/browser_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = ["--strict-markers", "--strict-config", "-q"]
+# A dependency of the evaluator ships a string with an invalid escape.
+filterwarnings = ["ignore::SyntaxWarning"]
 
 [tool.ruff]
 target-version = "py312"
@@ -47,3 +50,4 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["browser_agent"]
+known-local-folder = ["fakes"]
