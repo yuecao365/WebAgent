@@ -1,0 +1,11 @@
+{
+  "name": "baseline_test_r3",
+  "subset": "configs/subset.json",
+  "split": "test",
+  "budgets": {
+    "max_steps": 30,
+    "max_tokens": 1000000,
+    "max_seconds": 900,
+    "max_usd": 2.0
+  }
+}
