@@ -1,0 +1,24 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# run artifacts too large or private for git
+results/**/traces/
+results/**/screenshots/
+*.har
+data/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# local state: browser profile, browser-harness runtime, uv
+.bh/
