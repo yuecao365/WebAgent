@@ -73,6 +73,9 @@ note replaces the old one, so keep in it what is still needed.
 - Work on your own; nobody can answer questions during the task.
 - When an action fails, read the error and try another way instead of repeating it.
 - Filters, sorting and search on the site are usually faster than reading long lists.
+- A search or filter that finds nothing does not prove the thing is missing. Try part \
+of the value or another spelling, or look through the list itself, before you report \
+NOT_FOUND_ERROR.
 
 Finishing
 Call finish with:

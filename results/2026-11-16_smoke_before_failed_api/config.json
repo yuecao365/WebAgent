@@ -1,0 +1,35 @@
+{
+  "config": {
+    "name": "smoke_before",
+    "subset": "configs/subset.json",
+    "split": null,
+    "task_ids": [
+      344,
+      208,
+      704,
+      470,
+      496
+    ],
+    "limit": null,
+    "reset": "always",
+    "headless": true,
+    "budgets": {
+      "max_steps": 30,
+      "max_tokens": 1000000,
+      "max_seconds": 900.0,
+      "max_usd": 2.0
+    },
+    "switches": {
+      "prompt_caching": false
+    }
+  },
+  "model": "gpt-6-luna",
+  "pricing_usd_per_mtok": {
+    "input": 0.1,
+    "output": 0.5,
+    "cached_input": 0.01,
+    "cache_write": 0.125
+  },
+  "site_image": "am1n3e/webarena-verified-shopping_admin:0.1.0",
+  "git_commit": "a77d898"
+}

@@ -1,1 +1,6 @@
-task 344: fail (model_error, 1 steps, 0 tokens, $0.0000, 2s)
+task 344: success (finished, 3 steps, 21941 tokens, $0.0017, 10s)
+task 470: success (finished, 6 steps, 234920 tokens, $0.0095, 32s)
+task 704: fail (finished, 7 steps, 63604 tokens, $0.0024, 19s)
+task 496: success (finished, 8 steps, 114137 tokens, $0.0041, 33s)
+task 208: success (finished, 3 steps, 26571 tokens, $0.0022, 10s)
+results: C:\Users\cy200\Desktop\browswer-agent\results\2026-11-16_smoke_before

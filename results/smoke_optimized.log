@@ -1,0 +1,6 @@
+task 344: success (finished, 3 steps, 8187 tokens, $0.0008, 10s)
+task 470: fail (finished, 6 steps, 15054 tokens, $0.0013, 27s)
+task 704: success (finished, 7 steps, 16641 tokens, $0.0013, 24s)
+task 496: success (finished, 9 steps, 23434 tokens, $0.0019, 44s)
+task 208: fail (finished, 7 steps, 18550 tokens, $0.0016, 20s)
+results: C:\Users\cy200\Desktop\browswer-agent\results\2026-11-16_smoke_optimized

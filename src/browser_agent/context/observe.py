@@ -297,8 +297,11 @@ class _Renderer:
                 _Block(
                     "cut",
                     [
-                        f"{' ' * depth}… {count} more {role}s not shown; "
-                        f"read_page with {where} lists them all"
+                        # Said plainly: a model that saw a shortened list took a failed
+                        # site search as proof that the row did not exist.
+                        f"{' ' * depth}… {count} more {role}s not shown ({counts[role]} in "
+                        f"all); read_page with {where} lists them all, so look there "
+                        "before deciding one is missing"
                     ],
                 )
             )

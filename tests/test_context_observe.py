@@ -7,6 +7,8 @@ from browser_agent.context.observe import PageRenderer, ViewOptions
 
 from fakes import load_fixture
 
+HOW_TO_SEE_ALL = ", so look there before deciding one is missing"
+
 
 def node(node_id, role, name="", children=(), **extra):
     return {
@@ -148,7 +150,8 @@ def test_long_runs_are_counted_instead_of_listed():
         " [105] row: [106] ID | [107] Status",
         ' [110] row: 000000000 | Pending | [1103] link "View"',
         ' [111] row: 000000001 | Pending | [1113] link "View"',
-        " … 8 more rows not shown; read_page with section=104 lists them all",
+        " … 8 more rows not shown (11 in all); read_page with section=104 lists them all"
+        + HOW_TO_SEE_ALL,
     ]
 
 
@@ -174,7 +177,8 @@ def test_truncation_keeps_the_selected_option():
         ' [111] option "Country 1"',
         ' [112] option "Country 2"',
         ' [135] option "Country 25" selected',
-        " … 26 more options not shown; read_page with section=101 lists them all",
+        " … 26 more options not shown (30 in all); read_page with section=101 lists them all"
+        + HOW_TO_SEE_ALL,
     ]
 
 
@@ -185,7 +189,7 @@ def test_truncation_also_works_on_the_complete_outline():
 
     # The header row and the first order; the other five are counted.
     assert [line for line in lines if line.endswith("] row")] == ["  [105] row", "  [110] row"]
-    assert lines[-1] == "  … 5 more rows not shown; read_page with section=104 lists them all"
+    assert lines[-1].startswith("  … 5 more rows not shown (7 in all); read_page with section=104")
     # Not pruned: cells still have their own lines.
     assert '   [1100] cell "000000000"' in lines
 
