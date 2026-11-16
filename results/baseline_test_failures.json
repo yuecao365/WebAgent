@@ -1,0 +1,42 @@
+{
+  "108": {
+    "class": "wrong_page_or_filter",
+    "cause": "Used the monthly Orders report with Order Status left at Any, so orders that are not complete were counted (April 10 for 9, May 8 for 5)"
+  },
+  "129": {
+    "class": "gave_up",
+    "cause": "Opened one order twice, then finished with UNKNOWN_ERROR and its own to-do as the reason, without looking at four complete orders"
+  },
+  "200": {
+    "class": "over_budget",
+    "cause": "The oldest complete order is in the cut part of the list; searched it with read_page(find) ten times instead of sorting by date, and ended stuck"
+  },
+  "214": {
+    "class": "not_on_page",
+    "cause": "The admin review page does not expose the star rating; one run read it on the storefront as 40 and 20 (percent) instead of 2 and 1, the other gave up"
+  },
+  "216": {
+    "class": "not_on_page",
+    "cause": "The admin review page does not expose the star rating; both runs reported that they could not determine it"
+  },
+  "493": {
+    "class": "wrong_page_or_filter",
+    "cause": "Run 1 commented on order 308, not the customer's most recent pending order (65). Run 2 used order 65, but the site answered 'We cannot add order history' and the agent reported an error"
+  },
+  "705": {
+    "class": "wrong_page_or_filter",
+    "cause": "Right report, wrong start date for 'the last 45 days': 01/30 in one run and 02/01 in the other, where 01/29 is expected"
+  },
+  "711": {
+    "class": "evaluator_mismatch",
+    "cause": "Showed the Product Views report for the right dates; the evaluator expects a report_type parameter that this report's form does not have"
+  },
+  "773": {
+    "class": "action_not_done",
+    "cause": "Run 1 finished after four steps without deleting anything. Run 2 deleted with the mass action; the evaluator accepts only the single-review delete request"
+  },
+  "775": {
+    "class": "action_not_done",
+    "cause": "Deleted the review with the mass action in both runs; the evaluator accepts only the single-review delete request"
+  }
+}

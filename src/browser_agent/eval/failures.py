@@ -24,6 +24,8 @@ class FailureClass(StrEnum):
     GAVE_UP = "gave_up"
     NOT_ON_PAGE = "not_on_page"
     OVER_BUDGET = "over_budget"
+    # What was asked was done, in a way the evaluator has no way to accept.
+    EVALUATOR_MISMATCH = "evaluator_mismatch"
     HARNESS_ERROR = "harness_error"
     # A wrong answer whose trace nobody has read yet.
     WRONG_ANSWER_UNREVIEWED = "wrong_answer_unreviewed"
@@ -36,6 +38,7 @@ LABELS: dict[FailureClass, str] = {
     FailureClass.GAVE_UP: "Gave up or reported not found",
     FailureClass.NOT_ON_PAGE: "The page does not show the information",
     FailureClass.OVER_BUDGET: "Ran out of budget, stuck, or the model call failed",
+    FailureClass.EVALUATOR_MISMATCH: "Done as asked, but the evaluator cannot accept it",
     FailureClass.HARNESS_ERROR: "Harness error",
     FailureClass.WRONG_ANSWER_UNREVIEWED: "Wrong answer, trace not reviewed",
 }
@@ -46,6 +49,7 @@ NEEDS_REVIEW = frozenset(
         FailureClass.WRONG_PAGE_OR_FILTER,
         FailureClass.MISREAD_OR_MISCOUNTED,
         FailureClass.NOT_ON_PAGE,
+        FailureClass.EVALUATOR_MISMATCH,
     }
 )
 

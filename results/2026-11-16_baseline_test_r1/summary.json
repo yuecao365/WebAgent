@@ -1,0 +1,307 @@
+{
+  "tasks": 45,
+  "successes": 34,
+  "success_rate": 0.7555555555555555,
+  "mean_tokens": 27795.68888888889,
+  "mean_usd": 0.0025668194444444445,
+  "mean_seconds": 37.08777777777778,
+  "mean_steps": 7.8,
+  "total_usd": 0.11550687500000001,
+  "total_tokens": 1250806,
+  "usage": {
+    "input_tokens": 1053,
+    "cached_input_tokens": 388620,
+    "cache_write_tokens": 850803,
+    "output_tokens": 10330,
+    "reasoning_tokens": 1784
+  },
+  "cache_hit_rate": 0.3132829655712807,
+  "mean_section_tokens": {
+    "system": 5813.044444444445,
+    "tools": 6829.466666666666,
+    "task": 199.44444444444446,
+    "history": 1644.1555555555556,
+    "observation": 12856.377777777778,
+    "notes": 190.62222222222223,
+    "status": 31.244444444444444
+  },
+  "finish_reasons": {
+    "finished": 44,
+    "stuck": 1
+  },
+  "resets": 18,
+  "reset_seconds": 1221.65,
+  "fallbacks": {
+    "tasks": 45,
+    "task_successes": 34,
+    "rows": {
+      "bad_arguments": {
+        "label": "Tool arguments not JSON, error returned",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the next step succeeded",
+        "task_successes": 0,
+        "logged": true
+      },
+      "invalid_arguments": {
+        "label": "Arguments rejected by the schema, or unknown tool",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the next step succeeded",
+        "task_successes": 0,
+        "logged": true
+      },
+      "invalid_finish": {
+        "label": "Invalid finish returned to the model",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the next step succeeded",
+        "task_successes": 0,
+        "logged": true
+      },
+      "nudge": {
+        "label": "Reply without a tool call, nudged",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the next step succeeded",
+        "task_successes": 0,
+        "logged": true
+      },
+      "skipped_single_action": {
+        "label": "Extra call skipped: one call per step",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "skipped_after_failure": {
+        "label": "Call skipped after a failed call",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "skipped_after_navigation": {
+        "label": "Call skipped after a new page",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "tool_error": {
+        "label": "Tool call failed, error returned",
+        "triggers": 2,
+        "tasks": 2,
+        "recovered": 2,
+        "recovered_means": "the next step succeeded",
+        "task_successes": 2,
+        "logged": true
+      },
+      "recovery": {
+        "label": "Returned to the last stable URL",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the return worked and the next step succeeded",
+        "task_successes": 0,
+        "logged": true
+      },
+      "script_click": {
+        "label": "Clicked by script: element has no box",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "dialog_accepted": {
+        "label": "Native dialog accepted",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "result_cut": {
+        "label": "Long tool result cut",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "page_read_retry": {
+        "label": "Page read retried: page busy",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the page was read",
+        "task_successes": 0,
+        "logged": true
+      },
+      "settle_timeout": {
+        "label": "Settle ran out of time",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "cut_list_shown": {
+        "label": "Page shown with a cut list or table",
+        "triggers": 57,
+        "tasks": 20,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 16,
+        "logged": true
+      },
+      "cut_list_read": {
+        "label": "Cut list followed by read_page(find/section)",
+        "triggers": 14,
+        "tasks": 3,
+        "recovered": 13,
+        "recovered_means": "the read returned lines",
+        "task_successes": 2,
+        "logged": true
+      },
+      "stuck_hint": {
+        "label": "Stuck hint given",
+        "triggers": 2,
+        "tasks": 1,
+        "recovered": 0,
+        "recovered_means": "the task did not end as stuck",
+        "task_successes": 0,
+        "logged": true
+      },
+      "ended_stuck": {
+        "label": "Task ended as stuck (forced finish)",
+        "triggers": 1,
+        "tasks": 1,
+        "recovered": 1,
+        "recovered_means": "an answer was given",
+        "task_successes": 0,
+        "logged": true
+      },
+      "forced_finish": {
+        "label": "Forced finish on a budget",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "an answer was given",
+        "task_successes": 0,
+        "logged": true
+      },
+      "no_answer": {
+        "label": "Task ended without an answer",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "self_check": {
+        "label": "Finish intercepted for a check",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the answer changed between the first and the second finish",
+        "task_successes": 0,
+        "logged": true
+      },
+      "model_retry": {
+        "label": "Model API call retried (429, 5xx, timeout)",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": 0,
+        "recovered_means": "the call went through",
+        "task_successes": 0,
+        "logged": true
+      },
+      "effort_downgraded": {
+        "label": "Reasoning effort rejected, downgraded",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "minimal_mode": {
+        "label": "Switched to minimal request mode",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "model_error": {
+        "label": "Task ended by a model error",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "model_refusal": {
+        "label": "Task ended by a model refusal",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "spend_cap": {
+        "label": "Task ended by the spend cap",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "unexpected_write": {
+        "label": "Read-only task wrote; next task reset first",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      },
+      "harness_error": {
+        "label": "Harness error ended the task",
+        "triggers": 0,
+        "tasks": 0,
+        "recovered": null,
+        "recovered_means": null,
+        "task_successes": 0,
+        "logged": true
+      }
+    },
+    "self_check": {
+      "triggered": 0,
+      "answer_changed": 0,
+      "extra_steps": 0,
+      "task_successes": 0
+    }
+  }
+}
