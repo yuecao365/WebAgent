@@ -268,9 +268,15 @@ class BrowserSession:
         """Send these headers with every request of the attached tab."""
         self.cdp("Network.setExtraHTTPHeaders", headers=dict(headers))
 
-    def reset_state(self) -> None:
-        """Drop cookies and the recorded traffic so tasks do not leak into each other."""
+    def reset_state(self, origins: Sequence[str] = ()) -> None:
+        """Drop cookies, stored page data and the recorded traffic between tasks.
+
+        origins are the sites whose local storage and caches are cleared; pages keep
+        UI state there that would otherwise carry over to the next task.
+        """
         self.cdp("Network.clearBrowserCookies")
+        for origin in origins:
+            self.cdp("Storage.clearDataForOrigin", origin=origin, storageTypes="all")
         self.cdp("Page.navigate", url="about:blank")
         if self.recorder is not None:
             self.recorder.clear()

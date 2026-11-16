@@ -186,6 +186,7 @@
       "template_id": 246,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Delete all pending negative reviews for Circe fleece"
     },
     {
@@ -193,6 +194,7 @@
       "template_id": 246,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Delete all pending negative reviews"
     },
     {
@@ -200,6 +202,7 @@
       "template_id": 246,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Delete all pending reviews with less than 4 stars"
     },
     {
@@ -207,6 +210,7 @@
       "template_id": 246,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Delete all reviews from the scammer Arden"
     },
     {
@@ -214,6 +218,7 @@
       "template_id": 247,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Reduce the price of the product on the current page by $5"
     },
     {
@@ -221,6 +226,7 @@
       "template_id": 247,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Reduce the price of the product on the current page by 10%"
     },
     {
@@ -228,6 +234,7 @@
       "template_id": 247,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Reduce the price of the product on the current page by 15%"
     },
     {
@@ -235,6 +242,7 @@
       "template_id": 247,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Increase the price of the product on the current page by $11.5"
     },
     {
@@ -242,6 +250,7 @@
       "template_id": 248,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "How many reviews did our shop receive so far?"
     },
     {
@@ -249,6 +258,7 @@
       "template_id": 248,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "How many reviews did our shop receive in Apr 2023?"
     },
     {
@@ -256,6 +266,7 @@
       "template_id": 248,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "How many reviews did our shop receive during 2022?"
     },
     {
@@ -263,6 +274,7 @@
       "template_id": 248,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "How many reviews did our shop receive from the beginning of the shop?"
     },
     {
@@ -270,6 +282,7 @@
       "template_id": 249,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the title and rating for all reviews with 3 stars or below for Antonia Racer Tank. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
@@ -277,6 +290,7 @@
       "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the title and rating for all reviews with 3 stars or below for Erica Sports Bra. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
@@ -284,6 +298,7 @@
       "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the title and rating for all reviews with 3 stars or below for Circe ice fleece. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
@@ -291,6 +306,7 @@
       "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the title and rating for all reviews with 3 stars or below for Electra Bra Top. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
@@ -298,6 +314,7 @@
       "template_id": 257,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Cancel order 302"
     },
     {
@@ -305,6 +322,7 @@
       "template_id": 257,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Cancel order 307"
     },
     {
@@ -312,6 +330,7 @@
       "template_id": 257,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Cancel order 299"
     },
     {
@@ -319,6 +338,7 @@
       "template_id": 257,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Cancel order 301"
     },
     {
@@ -326,6 +346,7 @@
       "template_id": 268,
       "split": "learn",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the sales order report for for last months (today is March 15, 2023)."
     },
     {
@@ -333,6 +354,7 @@
       "template_id": 268,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the sales order report for over the last 45 days (today is March 15, 2023)."
     },
     {
@@ -340,6 +362,7 @@
       "template_id": 268,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the refund report for for Q1 (today is March 15, 2023)."
     },
     {
@@ -347,6 +370,7 @@
       "template_id": 268,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the sales order report for for last year (today is March 15, 2023)."
     },
     {
@@ -354,6 +378,7 @@
       "template_id": 270,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the monthly count of completed orders from May 2022 through December 2022, inclusive. Return a list of objects with keys \"month\" (month name) and \"count\" (as integer) only, without any additional details."
     },
     {
@@ -361,6 +386,7 @@
       "template_id": 270,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the monthly count of completed orders from January 2023 through May 2023, inclusive. Return a list of objects with keys \"month\" (month name) and \"count\" (as integer) only, without any additional details."
     },
     {
@@ -368,6 +394,7 @@
       "template_id": 270,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the monthly count of completed orders from Jan to December 2022, inclusive. Return a list of objects with keys \"month\" (month name) and \"count\" (as integer) only, without any additional details."
     },
     {
@@ -375,6 +402,7 @@
       "template_id": 270,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the monthly count of completed orders from Jan 2022 through Nov 2022, inclusive. Return a list of objects with keys \"month\" (month name) and \"count\" (as integer) only, without any additional details."
     },
     {
@@ -382,6 +410,7 @@
       "template_id": 271,
       "split": "learn",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the orders report from May 1, 2021 to March 31, 2022."
     },
     {
@@ -389,6 +418,7 @@
       "template_id": 271,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the shipping report from August 5, 2022 to March 1, 2023."
     },
     {
@@ -396,6 +426,7 @@
       "template_id": 271,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the product view report from July 5, 2021 to May 31, 2023."
     },
     {
@@ -403,6 +434,7 @@
       "template_id": 271,
       "split": "test",
       "task_type": "navigate",
+      "state_changing": false,
       "intent": "Show the coupons report from May 1, 2021 to May 15, 2023."
     },
     {
@@ -410,6 +442,7 @@
       "template_id": 275,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Change the page title of \"404 Not Found\" page on my site to \"Bruh bro you clicked the wrong page\"."
     },
     {
@@ -417,6 +450,7 @@
       "template_id": 275,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Change the page title of \"Enable Cookies\" page on my site to \"Cookie monster coming to your place\"."
     },
     {
@@ -424,6 +458,7 @@
       "template_id": 275,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Change the page title of \"Home Page\" page on my site to \"This is the home page!! Leave here!!\"."
     },
     {
@@ -431,6 +466,7 @@
       "template_id": 275,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Change the page title of \"Privacy Policy\" page on my site to \"No privacy policy is needed in this dystopian world\"."
     },
     {
@@ -438,6 +474,7 @@
       "template_id": 280,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Notify Jane Doe in their most recent pending order with message \"sorry we are out of stock, please reorder\""
     },
     {
@@ -445,6 +482,7 @@
       "template_id": 280,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Notify Grace Nguyen in their most recent pending order with message \"sorry we are bankrupt, please contact our customer service for refund\""
     },
     {
@@ -452,6 +490,7 @@
       "template_id": 280,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Notify Alex Thomas in their most recent pending order with message \"Yo, your order will be shipped soon!\""
     },
     {
@@ -459,6 +498,7 @@
       "template_id": 280,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Notify Lily Potter in their most recent pending order with message \"Thanks, your order is ready to be shipped!\""
     },
     {
@@ -466,6 +506,7 @@
       "template_id": 284,
       "split": "learn",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Update order #299 with the Federal Express tracking number 8974568499"
     },
     {
@@ -473,6 +514,7 @@
       "template_id": 284,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Update order #307 with the DHL tracking number 24353446464"
     },
     {
@@ -480,6 +522,7 @@
       "template_id": 284,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Update order #306 with the UPS tracking number 55591023930"
     },
     {
@@ -487,6 +530,7 @@
       "template_id": 284,
       "split": "test",
       "task_type": "mutate",
+      "state_changing": true,
       "intent": "Update order #304 with the USPS tracking number 13849373987"
     },
     {
@@ -494,6 +538,7 @@
       "template_id": 288,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the total number of reviews that our store received so far that mention term \"disappointed\""
     },
     {
@@ -501,6 +546,7 @@
       "template_id": 288,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the total number of reviews that our store received so far that mention term \"satisfied\""
     },
     {
@@ -508,6 +554,7 @@
       "template_id": 288,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the total number of reviews that our store received so far that mention term \"decent\""
     },
     {
@@ -515,6 +562,7 @@
       "template_id": 288,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the total number of reviews that our store received so far that mention term \"not useful\""
     },
     {
@@ -522,6 +570,7 @@
       "template_id": 364,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the customer name and email with phone number +1 2058812302. Return a list of objects with keys \"name\" and \"email\"."
     },
     {
@@ -529,6 +578,7 @@
       "template_id": 364,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the customer name and email with phone number 2137418080. Return a list of objects with keys \"name\" and \"email\"."
     },
     {
@@ -536,6 +586,7 @@
       "template_id": 364,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the customer name and email with phone number 2065555555. Return a list of objects with keys \"name\" and \"email\"."
     },
     {
@@ -543,6 +594,7 @@
       "template_id": 364,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the customer name and email with phone number 8015551212. Return a list of objects with keys \"name\" and \"email\"."
     },
     {
@@ -550,6 +602,7 @@
       "template_id": 366,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the customer email of the most recent cancelled order."
     },
     {
@@ -557,6 +610,7 @@
       "template_id": 366,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the order ID of the newest pending order."
     },
     {
@@ -564,6 +618,7 @@
       "template_id": 366,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the billing name of the oldest complete order."
     },
     {
@@ -571,6 +626,7 @@
       "template_id": 366,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "Get the date of the most recent cancelled order.Return the date in YYYY-MM-DD format or null if not available, without any additional details"
     },
     {
@@ -578,6 +634,7 @@
       "template_id": 1002,
       "split": "learn",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "What's the total number of items sold in the most recent 2 complete orders?"
     },
     {
@@ -585,6 +642,7 @@
       "template_id": 1002,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "What's the total number of items sold in the most recent 4 complete orders?"
     },
     {
@@ -592,6 +650,7 @@
       "template_id": 1002,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "What's the total number of items sold in the most recent 5 complete orders?"
     },
     {
@@ -599,6 +658,7 @@
       "template_id": 1002,
       "split": "test",
       "task_type": "retrieve",
+      "state_changing": false,
       "intent": "What's the total number of items sold in the most recent 7 complete orders?"
     }
   ]

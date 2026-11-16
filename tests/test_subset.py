@@ -12,8 +12,10 @@ from browser_agent.eval.webarena import (
     build_subset,
     dataset_tasks,
     expected_answer,
+    is_state_changing,
     load_subset,
     scorable,
+    unexpected_writes,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,6 +147,64 @@ def test_grid_requests_only_disqualify_navigate_tasks():
     entry["eval"][0]["expected"]["url"] = "__SHOPPING_ADMIN__/mui/index/render/"
 
     assert scorable(entry)
+
+
+def network_check(**expected):
+    return {"evaluator": "NetworkEventEvaluator", "expected": {"url": "x", **expected}}
+
+
+def test_a_task_checked_by_a_write_is_state_changing():
+    answer_only = task(1, 1)
+    answer_only["eval"] = answer_only["eval"][1:]
+    navigation = task(2, 1, "navigate")
+    navigation["eval"][0] = network_check(http_method="GET")
+    default_method = task(3, 1, "navigate")
+    default_method["eval"][0] = network_check(http_method=None)
+    post = task(4, 1, "mutate")
+    post["eval"][0] = network_check(http_method="POST")
+    body = task(5, 1, "mutate")
+    body["eval"][0] = network_check(post_data={"product[status]": "2"})
+
+    kinds = [is_state_changing(t) for t in (answer_only, navigation, default_method, post, body)]
+
+    assert kinds == [False, False, False, True, True]
+
+
+def test_state_changing_tasks_across_the_site():
+    tasks = [t for t in dataset_tasks() if list(t["sites"]) == ["shopping_admin"]]
+    changing = {t["task_id"] for t in tasks if is_state_changing(t)}
+    with_write_check = {
+        t["task_id"]
+        for t in tasks
+        if any(
+            e["evaluator"] == "NetworkEventEvaluator"
+            and (
+                (e["expected"].get("http_method") or "GET") != "GET"
+                or e["expected"].get("post_data")
+            )
+            for e in t["eval"]
+        )
+    }
+
+    assert len(tasks) == 182
+    assert len(changing) == 78
+    # Every task with a write check, plus the two that ask for a change the site refuses.
+    assert changing - with_write_check == {491, 790}
+    assert with_write_check <= changing
+
+
+def test_unexpected_writes_ignore_saved_grid_filters():
+    def request(method, url):
+        return {"request": {"method": method, "url": url}}
+
+    trace = [
+        request("GET", "http://localhost:7780/admin/customer/index/"),
+        request("POST", "http://localhost:7780/admin/mui/bookmark/save/"),
+        request("POST", "http://localhost:7780/admin/sales/order/cancel/order_id/302/"),
+    ]
+
+    assert unexpected_writes(trace) == ["POST /admin/sales/order/cancel/order_id/302/"]
+    assert unexpected_writes(trace[:2]) == []
 
 
 def test_expected_answer_reads_the_response_evaluator():

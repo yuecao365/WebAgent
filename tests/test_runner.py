@@ -81,6 +81,78 @@ def test_a_run_directory_is_never_reused(tmp_path):
     assert all(p.is_dir() for p in (first, second, third))
 
 
+# -- resets only when the site may be dirty ---------------------------------------
+
+
+def entry(task_id, state_changing):
+    return {"task_id": task_id, "state_changing": state_changing}
+
+
+def test_read_only_tasks_are_ordered_first_keeping_their_order():
+    entries = [entry(1, True), entry(2, False), entry(3, True), entry(4, False), entry(5, False)]
+
+    assert [e["task_id"] for e in runner.order_tasks(entries)] == [2, 4, 5, 1, 3]
+    # A task of unknown kind is treated as state-changing.
+    assert [e["task_id"] for e in runner.order_tasks([{"task_id": 9}, entry(2, False)])] == [2, 9]
+
+
+def simulate(scheduler, tasks):
+    """Run (state_changing, wrote, crashed) tasks; return which ones were reset before."""
+    resets = []
+    for state_changing, wrote, crashed in tasks:
+        reset = scheduler.needs_reset()
+        if reset:
+            scheduler.did_reset()
+        resets.append(reset)
+        scheduler.task_started()
+        if not crashed:
+            scheduler.task_ended(state_changing, wrote=wrote)
+    return resets
+
+
+READ, WRITE = (False, False, False), (True, False, False)
+
+
+def test_a_run_starts_with_a_reset_and_read_only_tasks_need_no_more():
+    assert simulate(runner.ResetScheduler(), [READ, READ, READ]) == [True, False, False]
+
+
+def test_every_state_changing_task_is_followed_by_a_reset_whatever_its_outcome():
+    scheduler = runner.ResetScheduler()
+
+    resets = simulate(scheduler, [READ, WRITE, WRITE, READ, READ])
+
+    assert resets == [True, False, True, True, False]
+    assert scheduler.resets == 3
+
+
+def test_a_read_only_task_that_wrote_or_crashed_leaves_the_site_dirty():
+    wrote, crashed = (False, True, False), (False, False, True)
+
+    assert simulate(runner.ResetScheduler(), [READ, wrote, READ, READ]) == [
+        True, False, True, False,
+    ]  # fmt: skip
+    assert simulate(runner.ResetScheduler(), [READ, crashed, READ]) == [True, False, True]
+
+
+def test_reset_policies_always_and_never():
+    assert simulate(runner.ResetScheduler("always"), [READ, READ]) == [True, True]
+    assert simulate(runner.ResetScheduler("never"), [WRITE, WRITE]) == [False, False]
+
+
+def test_planned_resets_for_the_checked_in_subset():
+    root = runner.Path(__file__).resolve().parents[1]
+    everything = select_tasks(RunConfig(name="x"), root)
+    learn = select_tasks(RunConfig(name="x", split="learn"), root)
+
+    assert len(everything) == 60
+    # 36 read-only tasks first, behind one reset; then one reset between the 24 others.
+    assert [e["state_changing"] for e in everything] == [False] * 36 + [True] * 24
+    assert runner.planned_resets(everything) == 24
+    assert runner.planned_resets(everything, "always") == 60
+    assert (len(learn), runner.planned_resets(learn)) == (15, 6)
+
+
 def test_runs_above_the_smoke_size_need_confirmation(tmp_path):
     write_subset(tmp_path, count=6)
 
@@ -220,6 +292,22 @@ def test_wait_ready_needs_two_good_checks_in_a_row(monkeypatch):
     env.wait_ready(timeout=30)
 
     assert next(health, "used up") == "used up"
+
+
+def test_reset_saves_the_grid_state_and_restore_puts_it_back(monkeypatch):
+    docker = Docker()
+    env = ShoppingAdmin(run_command=docker)
+    monkeypatch.setattr(env, "wait_ready", lambda timeout: None)
+
+    env.reset()
+    env.restore_ui_state()
+
+    saved, restored = docker.commands[2], docker.commands[3]
+    assert saved[:5] == ["docker", "exec", "webarena-verified-shopping_admin", "bash", "-c"]
+    assert saved[5].startswith("mysqldump ")
+    assert " ui_bookmark > " in saved[5]
+    assert restored[5].startswith("mysql ")
+    assert restored[5].endswith(saved[5].split(" > ")[1])
 
 
 def test_site_config_from_env(monkeypatch):

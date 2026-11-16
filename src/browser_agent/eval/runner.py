@@ -26,7 +26,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from browser_agent.browser import actions
 from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
 from browser_agent.context.observe import PageRenderer, ViewOptions
-from browser_agent.eval.webarena import ShoppingAdmin, SiteConfig, load_subset
+from browser_agent.eval.webarena import (
+    ShoppingAdmin,
+    SiteConfig,
+    load_subset,
+    unexpected_writes,
+)
 from browser_agent.harness.events import EventLog
 from browser_agent.harness.llm import LLMClient, client_from_env
 from browser_agent.harness.loop import AgentLoop, Budgets, LoopConfig
@@ -77,7 +82,8 @@ class RunConfig(BaseModel):
     split: Literal["learn", "test"] | None = None
     task_ids: list[int] | None = None
     limit: int | None = None
-    reset: Literal["always", "never"] = "always"
+    # when_dirty resets only if an earlier task may have changed the site.
+    reset: Literal["when_dirty", "always", "never"] = "when_dirty"
     headless: bool = True
     budgets: BudgetSettings = Field(default_factory=BudgetSettings)
     switches: Switches = Field(default_factory=Switches)
@@ -93,7 +99,61 @@ def select_tasks(config: RunConfig, root: Path) -> list[dict[str, Any]]:
         entries = [entry for entry in entries if entry["task_id"] in wanted]
     if config.limit is not None:
         entries = entries[: config.limit]
-    return entries
+    return order_tasks(entries)
+
+
+def order_tasks(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Read-only tasks first, then state-changing ones, each group in subset order.
+
+    Read-only tasks can follow each other without a reset, so putting them together
+    leaves one reset per state-changing task instead of one per task.
+    """
+    return sorted(entries, key=lambda entry: bool(entry.get("state_changing", True)))
+
+
+class ResetScheduler:
+    """Decides before each task whether the site has to be reset first.
+
+    Under "when_dirty" the site is reset only when it may differ from its initial
+    state: at the start of a run, after a state-changing task whatever its outcome,
+    after a task whose trace shows a write nobody asked for, and after a task the
+    harness could not finish.
+    """
+
+    def __init__(self, policy: str = "when_dirty") -> None:
+        self._policy = policy
+        self._dirty = True
+        self.resets = 0
+
+    def needs_reset(self) -> bool:
+        if self._policy == "always":
+            return True
+        if self._policy == "never":
+            return False
+        return self._dirty
+
+    def did_reset(self) -> None:
+        self._dirty = False
+        self.resets += 1
+
+    def task_started(self) -> None:
+        """Until a task has ended, what it did to the site is unknown."""
+        self._dirty = True
+
+    def task_ended(self, state_changing: bool, wrote: bool = False) -> None:
+        """A task that ran to its end leaves the site clean only if it wrote nothing."""
+        self._dirty = state_changing or wrote
+
+
+def planned_resets(entries: list[dict[str, Any]], policy: str = "when_dirty") -> int:
+    """How many resets a run of these tasks needs if no task writes unexpectedly."""
+    scheduler = ResetScheduler(policy)
+    for entry in entries:
+        if scheduler.needs_reset():
+            scheduler.did_reset()
+        scheduler.task_started()
+        scheduler.task_ended(bool(entry.get("state_changing", True)))
+    return scheduler.resets
 
 
 def new_run_dir(results: Path, name: str, today: str | None = None) -> Path:
@@ -143,6 +203,8 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         # Estimated prompt tokens per task, by section of the prompt.
         "mean_section_tokens": {name: tokens / count for name, tokens in sections.items() if count},
         "finish_reasons": dict(Counter(record["finish_reason"] for record in records)),
+        "resets": sum(1 for record in records if record.get("did_reset")),
+        "reset_seconds": sum(record.get("reset_seconds", 0.0) for record in records),
     }
 
 
@@ -214,14 +276,25 @@ def run_task(
     llm: LLMClient,
     config: RunConfig,
     run_dir: Path,
+    scheduler: ResetScheduler,
 ) -> dict[str, Any]:
-    """Reset, run and score one task; returns its record."""
+    """Reset if needed, run and score one task; returns its record."""
     task = env.task(entry["task_id"])
     trace_dir = run_dir / "traces" / str(task.task_id)
     trace_dir.mkdir(parents=True)
-    reset_seconds = env.reset() if config.reset == "always" else 0.0
+    state_changing = bool(entry.get("state_changing", True))
+    # Leave the last task's page first. A grid saves its filters a second or two
+    # after they change; a page still open could save them after the restore below.
+    browser.reset_state([origin_of(env.site.url)])
+    did_reset = scheduler.needs_reset()
+    reset_seconds = 0.0
+    if did_reset:
+        reset_seconds = env.reset()
+        scheduler.did_reset()
+    elif config.reset == "when_dirty":
+        env.restore_ui_state()
+    scheduler.task_started()
 
-    browser.reset_state()
     browser.set_extra_headers(env.site.auth_headers)
     actions.goto(browser, task.start_url)
 
@@ -261,6 +334,8 @@ def run_task(
     har_path = trace_dir / "network.har"
     assert browser.recorder is not None
     browser.recorder.save(har_path)
+    writes = unexpected_writes(browser.recorder.har()["log"]["entries"])
+    scheduler.task_ended(state_changing, wrote=bool(writes))
     score = env.evaluate(task.task_id, response, har_path)
     (trace_dir / "eval_result.json").write_text(
         json.dumps(score.detail, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -285,6 +360,10 @@ def run_task(
         "usd": result.cost_usd,
         "seconds": round(result.seconds, 2),
         "reset_seconds": round(reset_seconds, 2),
+        "state_changing": state_changing,
+        "did_reset": did_reset,
+        # Writes seen in the trace of a read-only task; they force the next reset.
+        "unexpected_writes": [] if state_changing else writes,
         "error": result.error,
     }
 
@@ -333,6 +412,12 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
     )
 
     records: list[dict[str, Any]] = []
+    scheduler = ResetScheduler(config.reset)
+    print(
+        f"{len(entries)} tasks, {planned_resets(entries, config.reset)} resets planned "
+        f"(policy {config.reset})",
+        flush=True,
+    )
     session = BrowserSession(
         BrowserConfig(
             data_dir=data_dir,
@@ -343,7 +428,7 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
     with session:
         for entry in entries:
             try:
-                record = run_task(entry, env, session, llm, config, run_dir)
+                record = run_task(entry, env, session, llm, config, run_dir, scheduler)
             except Exception as exc:
                 record = {
                     "task_id": entry["task_id"], "template_id": entry["template_id"],
@@ -352,6 +437,8 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
                     "finish_reason": "harness_error", "forced": False, "answered": False,
                     "steps": 0, "tokens": 0, "usage": {}, "usd": 0.0, "seconds": 0.0,
                     "reset_seconds": 0.0, "error": f"{type(exc).__name__}: {exc}",
+                    "state_changing": bool(entry.get("state_changing", True)),
+                    "did_reset": False, "unexpected_writes": [],
                 }  # fmt: skip
             records.append(record)
             with (run_dir / "records.jsonl").open("a", encoding="utf-8") as handle:

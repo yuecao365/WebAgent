@@ -29,6 +29,13 @@ DEFAULT_IMAGE = "am1n3e/webarena-verified-shopping_admin:0.1.0"
 DEFAULT_CONTAINER = "webarena-verified-shopping_admin"
 # Magento admin grids fetch their rows from this endpoint with an XHR.
 GRID_DATA_PATH = "/mui/index/render"
+# Requests that write but do not change the shop's data: a grid saving its filters,
+# sorting and paging for the signed-in admin. That state is restored between tasks.
+UI_STATE_PATHS = ("/mui/bookmark/save",)
+UI_STATE_TABLE = "ui_bookmark"
+_UI_STATE_DUMP = "/tmp/browser_agent_ui_state.sql"
+# Database account of the benchmark image; a published test value, not a secret.
+_MYSQL = "-umagentouser -pMyPassword magentodb"
 
 
 class SiteError(RuntimeError):
@@ -162,7 +169,23 @@ class ShoppingAdmin:
         if result.returncode != 0:
             raise SiteError(f"docker run failed: {result.stderr.strip()}")
         self.wait_ready(timeout)
+        self._in_container(f"mysqldump {_MYSQL} {UI_STATE_TABLE} > {_UI_STATE_DUMP}")
         return time.monotonic() - started
+
+    def restore_ui_state(self) -> None:
+        """Put the admin's saved grid filters back as they were after the last reset.
+
+        A task that only reads still leaves its filters, sorting and paging behind,
+        because the grids save them on the server. The next task would open a grid
+        that is already filtered. Restoring one small table is enough to undo that
+        and takes well under a second, so no reset is needed for it.
+        """
+        self._in_container(f"mysql {_MYSQL} < {_UI_STATE_DUMP}")
+
+    def _in_container(self, shell_command: str) -> None:
+        result = self._run(["docker", "exec", self.site.container, "bash", "-c", shell_command])
+        if result.returncode != 0:
+            raise SiteError(f"`{shell_command}` failed in the container: {result.stderr.strip()}")
 
     def wait_ready(self, timeout: float = 420.0) -> None:
         """Block until the services are healthy and the admin signs in twice in a row."""
@@ -219,6 +242,44 @@ def expected_answer(task: dict[str, Any]) -> tuple[str, str]:
             expected = evaluator["expected"]
             return str(expected["task_type"]).lower(), str(expected["status"])
     raise ValueError(f"task {task['task_id']} has no AgentResponseEvaluator")
+
+
+def is_state_changing(task: dict[str, Any]) -> bool:
+    """Whether doing the task may change the shop's data, read off its evaluators.
+
+    A task whose network check expects a write (any method but GET, or a request
+    body) is checked against the site's state and is state-changing. So is a task
+    whose expected answer is of type MUTATE even when it has no network check: two
+    tasks ask for a change the site refuses, and an agent may still try. A task
+    checked only by its answer, or by a page navigation, is read-only.
+    """
+    if expected_answer(task)[0] == "mutate":
+        return True
+    for evaluator in task["eval"]:
+        if evaluator["evaluator"] != "NetworkEventEvaluator":
+            continue
+        expected = evaluator["expected"]
+        if (expected.get("http_method") or "GET").upper() != "GET" or expected.get("post_data"):
+            return True
+    return False
+
+
+def unexpected_writes(har_entries: Sequence[dict[str, Any]]) -> list[str]:
+    """Requests in a trace that may have changed the shop's data.
+
+    Used after a read-only task: an agent can change something it was not asked to.
+    Saving grid filters does not count; that state is restored between tasks.
+    """
+    writes = []
+    for entry in har_entries:
+        request = entry["request"]
+        path = urlparse(request["url"]).path
+        if request["method"].upper() in ("GET", "HEAD", "OPTIONS"):
+            continue
+        if any(marker in path for marker in UI_STATE_PATHS):
+            continue
+        writes.append(f"{request['method']} {path}")
+    return writes
 
 
 def scorable(task: dict[str, Any]) -> bool:
@@ -317,6 +378,7 @@ def build_subset(
                     "template_id": template_id,
                     "split": "learn" if position == 0 else "test",
                     "task_type": task_type,
+                    "state_changing": is_state_changing(task),
                     "intent": task["intent"],
                 }
             )
