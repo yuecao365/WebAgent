@@ -57,32 +57,7 @@ class Browser(Protocol):
 
     def wheel(self, x: float, y: float, dy: float) -> None: ...
 
-    def settle(self, timeout: float = 30.0) -> None:
-        """Wait until the page has loaded and stopped changing.
-
-        Admin pages keep building themselves after the load event: scripts load in
-        chains and grids fill from XHR. The page counts as settled when the network
-        has been idle and the element count has stayed the same across two looks.
-        """
-        deadline = time.monotonic() + timeout
-        self._guard(lambda: self._bh.wait_for_load(timeout=timeout))
-        previous = -1
-        while time.monotonic() < deadline:
-            remaining = max(deadline - time.monotonic(), 0.5)
-            self._guard(lambda r=remaining: self._bh.wait_for_network_idle(timeout=r, idle_ms=500))
-            count = self._element_count()
-            if count == previous:
-                return
-            previous = count
-            time.sleep(0.3)
-
-    def _element_count(self) -> int:
-        result = self.cdp(
-            "Runtime.evaluate",
-            expression="document.getElementsByTagName('*').length",
-            returnByValue=True,
-        )
-        return int(result.get("result", {}).get("value") or 0)
+    def settle(self) -> None: ...
 
     def pending_dialog(self) -> dict[str, Any] | None: ...
 
@@ -248,14 +223,42 @@ class BrowserSession:
     def wheel(self, x: float, y: float, dy: float) -> None:
         self._guard(lambda: self._bh.scroll(x, y, dy=dy))
 
-    def settle(self) -> None:
-        """Wait for the page and its follow-up requests to finish.
+    def settle(self, timeout: float = 30.0) -> None:
+        """Wait until the page has loaded and stopped changing, or the time is up.
 
-        Admin grids render from XHR after the load event, so the load event alone
-        would hand the model a half-drawn page.
+        Admin pages keep building themselves after the load event: scripts load in
+        chains and grids fill from XHR. The page counts as settled when it has
+        loaded, the network has been idle and the element count has stayed the same
+        across two looks.
+
+        A page in the middle of a navigation, or busy running script, may not answer
+        for seconds. That is not a failure of the action that caused it, so an
+        unanswered question is asked again until the time is up; settle never raises.
         """
-        self._guard(lambda: self._bh.wait_for_load(timeout=20.0))
-        self._guard(lambda: self._bh.wait_for_network_idle(timeout=10.0, idle_ms=500))
+        deadline = time.monotonic() + timeout
+        previous = -1
+        while time.monotonic() < deadline:
+            remaining = max(deadline - time.monotonic(), 0.5)
+            try:
+                loaded = self._bh.wait_for_load(timeout=min(remaining, 15.0))
+                self._bh.wait_for_network_idle(timeout=min(remaining, 10.0), idle_ms=500)
+                count = self._element_count()
+            except Exception:
+                previous = -1
+                time.sleep(0.5)
+                continue
+            if loaded and count == previous:
+                return
+            previous = count
+            time.sleep(0.3)
+
+    def _element_count(self) -> int:
+        result = self._bh.cdp(
+            "Runtime.evaluate",
+            expression="document.getElementsByTagName('*').length",
+            returnByValue=True,
+        )
+        return int(result.get("result", {}).get("value") or 0)
 
     def pending_dialog(self) -> dict[str, Any] | None:
         # page_info() reports an open native dialog instead of evaluating script,

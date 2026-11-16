@@ -1,0 +1,19 @@
+{
+  "name": "learn_b2_retry_486",
+  "subset": "configs/subset.json",
+  "api": "chat",
+  "reasoning_effort": "none",
+  "budgets": {
+    "max_steps": 30,
+    "max_tokens": 1000000,
+    "max_seconds": 900,
+    "max_usd": 2.0
+  },
+  "switches": {
+    "prune_observation": true,
+    "truncate_lists": true
+  },
+  "task_ids": [
+    486
+  ]
+}
