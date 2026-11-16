@@ -1,0 +1,5 @@
+{
+  "name": "baseline",
+  "subset": "configs/subset.json",
+  "budgets": {"max_steps": 30, "max_tokens": 1000000, "max_seconds": 900, "max_usd": 2.0}
+}

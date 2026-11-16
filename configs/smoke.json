@@ -1,0 +1,6 @@
+{
+  "name": "smoke",
+  "subset": "configs/subset.json",
+  "task_ids": [288, 344, 676, 453, 496],
+  "budgets": {"max_steps": 30, "max_tokens": 1000000, "max_seconds": 900, "max_usd": 2.0}
+}
