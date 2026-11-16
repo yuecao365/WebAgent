@@ -11,6 +11,7 @@ them.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -266,6 +267,8 @@ SectionRenderer = Callable[[Observation, int], str | None]
 PageSearch = Callable[[Observation, str, int | None], str]
 
 MAX_OBSERVATION_CHARS = 300_000
+# How often the page is read before a browser error ends the task.
+READ_ATTEMPTS = 3
 
 
 def full_page(observation: Observation, previous: Observation | None) -> str:
@@ -293,8 +296,10 @@ class ToolExecutor:
         render: ObservationRenderer = full_page,
         render_section: SectionRenderer | None = None,
         search: PageSearch | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._search = search
+        self._sleep = sleep
         self._browser = browser
         self._allowed_origins = frozenset(origin.lower() for origin in allowed_origins)
         self._render = render
@@ -329,13 +334,28 @@ class ToolExecutor:
 
     def view(self) -> PageView:
         """Read the page as it is now. Called once per step, after the step's calls."""
-        observation = observe(self._browser)
+        observation = self._observe()
         # After read_page the model asked for the whole page, so it gets no diff.
         previous = None if self._show_whole_page else self._previous
         text = self._render(observation, previous)
         self._previous = observation
         self._show_whole_page = False
         return PageView(text, observation.fingerprint(), observation.url, observation.title)
+
+    def _observe(self) -> Observation:
+        """Read the page, giving a busy browser time before giving up.
+
+        A page in the middle of loading can leave a script call unanswered for a few
+        seconds. Without a second try that ended the whole task with a harness error.
+        """
+        for attempt in range(1, READ_ATTEMPTS + 1):
+            try:
+                return observe(self._browser)
+            except BrowserError:
+                if attempt == READ_ATTEMPTS:
+                    raise
+                self._sleep(2.0 * attempt)
+        raise AssertionError("unreachable")
 
     def recover(self, url: str) -> ToolOutcome:
         """Return to a page that worked before, after repeated failures."""
@@ -375,7 +395,7 @@ class ToolExecutor:
         if args.find is not None and args.find.strip():
             if self._search is None:
                 raise ActionError("searching the page is not available in this run")
-            found = self._search(observe(self._browser), args.find, args.section)
+            found = self._search(self._observe(), args.find, args.section)
             return ToolOutcome(True, found.splitlines()[0], detail=found)
         if args.section is None:
             self._browser.settle()
@@ -383,7 +403,7 @@ class ToolExecutor:
             return ToolOutcome(True, "Read the page again.")
         if self._render_section is None:
             return ToolOutcome(True, "The page text already shows every element in full.")
-        section = self._render_section(observe(self._browser), args.section)
+        section = self._render_section(self._observe(), args.section)
         if section is None:
             raise ActionError(
                 f"ref {args.section} is not on the current page; use a ref from the page text"

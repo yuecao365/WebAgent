@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from browser_agent.browser.session import BrowserError
 from browser_agent.harness.tools import (
     FINISH_TOOL,
     MAX_SUMMARY_CHARS,
@@ -218,6 +219,37 @@ def test_the_renderer_is_a_plug_point_and_gets_the_previous_page():
     tools.view()
     assert seen[0] is None
     assert seen[1].title == "Admin"
+
+
+class BusyBrowser(FakeBrowser):
+    """A browser whose page does not answer the first few times it is read."""
+
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = failures
+
+    def cdp(self, method, **params):
+        if method == "Accessibility.getFullAXTree" and self.failures > 0:
+            self.failures -= 1
+            raise BrowserError("Accessibility.getFullAXTree failed: timed out")
+        return super().cdp(method, **params)
+
+
+def test_a_busy_page_is_read_again_before_giving_up():
+    waits = []
+    tools = executor(BusyBrowser(failures=2), sleep=waits.append)
+
+    page = tools.view()
+
+    assert page.title == "Admin"
+    assert waits == [2.0, 4.0]
+
+
+def test_a_page_that_stays_busy_is_an_error():
+    tools = executor(BusyBrowser(failures=3), sleep=lambda seconds: None)
+
+    with pytest.raises(BrowserError, match="timed out"):
+        tools.view()
 
 
 def test_read_page_without_a_section_waits_and_reads_again():
