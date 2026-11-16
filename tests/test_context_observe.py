@@ -7,7 +7,8 @@ from browser_agent.context.observe import PageRenderer, ViewOptions
 
 from fakes import load_fixture
 
-HOW_TO_SEE_ALL = ", so look there before deciding one is missing"
+CUT = "({total} in all). read_page with find searches them too; with section={ref} it "
+CUT += "lists them all. Look there before deciding one is missing"
 
 
 def node(node_id, role, name="", children=(), **extra):
@@ -38,8 +39,8 @@ def grid(rows):
     """A page with a search box and a table of `rows` orders."""
     nodes = [
         node(1, "RootWebArea", "Orders", children=[2, 3, 4]),
-        node(2, "heading", "Orders", children=[90]),
-        node(90, "StaticText", "Orders"),
+        node(2, "heading", "Orders", children=[8]),
+        node(8, "StaticText", "Orders"),
         node(3, "textbox", "Search by keyword"),
         node(4, "table", "", children=[5, *range(10, 10 + rows)]),
         node(5, "row", "", children=[6, 7]),
@@ -201,7 +202,7 @@ def test_pruning_keeps_the_choices_of_a_select():
 
 
 def test_long_runs_are_counted_instead_of_listed():
-    options = ViewOptions(prune=True, truncate=True, max_rows=3)
+    options = ViewOptions(prune=True, truncate=True, max_rows=3, max_list_chars=0)
 
     lines = body(PageRenderer(options).render(page(grid(10)), None))
 
@@ -210,8 +211,7 @@ def test_long_runs_are_counted_instead_of_listed():
         " [105] row: [106] ID | [107] Status",
         ' [110] row: 000000000 | Pending | [1103] link "View"',
         ' [111] row: 000000001 | Pending | [1113] link "View"',
-        " … 8 more rows not shown (11 in all); read_page with section=104 lists them all"
-        + HOW_TO_SEE_ALL,
+        " … 8 more rows not shown " + CUT.format(total=11, ref=104),
     ]
 
 
@@ -237,25 +237,72 @@ def test_truncation_keeps_the_selected_option():
         ' [111] option "Country 1"',
         ' [112] option "Country 2"',
         ' [135] option "Country 25" selected',
-        " … 26 more options not shown (30 in all); read_page with section=101 lists them all"
-        + HOW_TO_SEE_ALL,
+        " … 26 more options not shown " + CUT.format(total=30, ref=101),
     ]
 
 
 def test_truncation_also_works_on_the_complete_outline():
-    options = ViewOptions(truncate=True, max_rows=2)
+    options = ViewOptions(truncate=True, max_rows=2, max_list_chars=0)
 
     lines = body(PageRenderer(options).render(page(grid(6)), None))
 
     # The header row and the first order; the other five are counted.
     assert [line for line in lines if line.endswith("] row")] == ["  [105] row", "  [110] row"]
-    assert lines[-1].startswith("  … 5 more rows not shown (7 in all); read_page with section=104")
+    assert lines[-1] == "  … 5 more rows not shown " + CUT.format(total=7, ref=104)
     # Not pruned: cells still have their own lines.
     assert '   [1100] cell "000000000"' in lines
 
 
+def test_a_table_is_cut_by_its_size_not_by_a_row_count():
+    """A table of ordinary length stays whole; only a really long one is shortened."""
+    options = ViewOptions(prune=True, truncate=True, max_rows=3, max_list_chars=2000)
+    row_chars = len(' [110] row: 000000000 | Pending | [1103] link "View"')
+
+    short = body(PageRenderer(options).render(page(grid(30)), None))
+    long = body(PageRenderer(options).render(page(grid(100)), None))
+
+    assert not any("not shown" in line for line in short)
+    assert len([line for line in short if " row: 0000" in line]) == 30
+    kept = len([line for line in long if " row: " in line])
+    assert long[-1].startswith(f" … {101 - kept} more rows not shown (101 in all).")
+    # As many rows as fit into the size limit, not a fixed few.
+    assert 2000 // row_chars - 2 <= kept <= 2000 // row_chars + 2
+
+
+def test_find_searches_rows_the_page_view_left_out():
+    renderer = PageRenderer(ViewOptions(prune=True, truncate=True, max_rows=3, max_list_chars=0))
+    observation = page(grid(60))
+
+    shown = renderer.render(observation, None)
+    found = renderer.find(observation, "000000057")
+
+    assert "000000057" not in shown
+    assert found.splitlines() == [
+        "1 lines contain '000000057':",
+        '[167] row: 000000057 | Pending | [1673] link "View"',
+    ]
+    assert (
+        renderer.find(observation, "no such order")
+        == "No line of the page contains 'no such order'."
+    )
+
+
+def test_find_is_case_blind_can_be_limited_to_a_section_and_caps_its_answer():
+    renderer = PageRenderer(ViewOptions(prune=True, truncate=True))
+    observation = page(grid(60))
+
+    everything = renderer.find(observation, "PENDING").splitlines()
+    heading_only = renderer.find(observation, "orders", ref=102)
+
+    assert everything[0] == "60 lines contain 'PENDING':"
+    assert len(everything) == 42
+    assert everything[-1] == "… 20 more matching lines; search for a longer text"
+    assert heading_only.splitlines() == ["1 lines contain 'orders':", 'heading "Orders"']
+    assert renderer.find(observation, "x", ref=999_999) == "ref 999999 is not on the current page."
+
+
 def test_a_section_lists_everything_under_one_element():
-    renderer = PageRenderer(ViewOptions(prune=True, truncate=True, max_rows=3))
+    renderer = PageRenderer(ViewOptions(prune=True, truncate=True, max_rows=3, max_list_chars=0))
     observation = page(grid(10))
 
     section = renderer.section(observation, 104)

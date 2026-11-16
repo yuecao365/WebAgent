@@ -52,6 +52,7 @@ _LANDMARK_ROLES = frozenset(
 # Landmarks that are kept even without a name.
 _ALWAYS_SHOWN = frozenset({"dialog", "alertdialog", "alert", "table", "grid", "menu"})
 _SECTION_MAX_CHARS = 40_000
+_FIND_MAX_LINES = 40
 # Below this size a section is shown complete even when the page view is pruned.
 _SECTION_FULL_CHARS = 6_000
 
@@ -63,8 +64,11 @@ class ViewOptions:
     prune: bool = False
     truncate: bool = False
     diff: bool = False
-    # How many of a run are shown before the rest is counted instead.
+    # Table rows: a table is cut only when its text is longer than max_list_chars,
+    # and never to fewer than max_rows rows.
+    max_list_chars: int = 16_000
     max_rows: int = 20
+    # Other runs are counted: how many are shown before the rest is counted instead.
     max_options: int = 8
     max_items: int = 40
     # A diff larger than this share of the page is not worth reading as a diff.
@@ -327,8 +331,6 @@ class _Renderer:
     # -- truncation --------------------------------------------------------
 
     def _limit(self, role: str) -> int | None:
-        if role == "row":
-            return self._options.max_rows
         if role == "option":
             return self._options.max_options
         if role in INTERACTIVE_ROLES:
@@ -338,20 +340,40 @@ class _Renderer:
     def _truncate(
         self, blocks: list[_Block], depth: int, holder: dict[str, Any] | None
     ) -> list[_Block]:
-        """Keep the first few blocks of each long run of one role, and count the rest."""
+        """Shorten each long run of one role and say how much of it is not shown.
+
+        Rows are measured by their text, not counted: a table is cut only when it
+        is longer than max_list_chars, and then keeps as many rows as fit. A model
+        that sees part of a list tends to trust the site's search for the rest, and
+        that search misses things, so lists of ordinary length stay whole.
+        """
+        options = self._options
         counts: dict[str, int] = {}
+        sizes: dict[str, int] = {}
         for block in blocks:
             counts[block.role] = counts.get(block.role, 0) + 1
+            sizes[block.role] = sizes.get(block.role, 0) + sum(len(line) for line in block.lines)
         kept: list[_Block] = []
         seen: dict[str, int] = {}
+        used: dict[str, int] = {}
         dropped: dict[str, int] = {}
         for block in blocks:
-            limit = self._limit(block.role)
-            seen[block.role] = seen.get(block.role, 0) + 1
-            over = limit is not None and counts[block.role] > limit and seen[block.role] > limit
+            role = block.role
+            seen[role] = seen.get(role, 0) + 1
+            used[role] = used.get(role, 0) + sum(len(line) for line in block.lines)
+            if role == "row":
+                long_run = sizes[role] > options.max_list_chars
+                over = (
+                    long_run
+                    and seen[role] > options.max_rows
+                    and used[role] > options.max_list_chars
+                )
+            else:
+                limit = self._limit(role)
+                over = limit is not None and counts[role] > limit and seen[role] > limit
             # The chosen option stays visible wherever it is in the list.
             if over and not block.selected:
-                dropped[block.role] = dropped.get(block.role, 0) + 1
+                dropped[role] = dropped.get(role, 0) + 1
                 continue
             kept.append(block)
         for role, count in dropped.items():
@@ -360,11 +382,9 @@ class _Renderer:
                 _Block(
                     "cut",
                     [
-                        # Said plainly: a model that saw a shortened list took a failed
-                        # site search as proof that the row did not exist.
                         f"{' ' * depth}… {count} more {role}s not shown ({counts[role]} in "
-                        f"all); read_page with {where} lists them all, so look there "
-                        "before deciding one is missing"
+                        f"all). read_page with find searches them too; with {where} it "
+                        "lists them all. Look there before deciding one is missing"
                     ],
                 )
             )
@@ -431,7 +451,27 @@ class PageRenderer:
                     "shown: lines with + are new, lines with - are gone. Call read_page "
                     "with section null to see the whole page.\n" + "\n".join(changed)
                 )
-        return f"{header}\n\n{cut(chr(10).join(lines), options.max_chars)}"
+        body = "\n".join(lines)
+        return f"{header}\n\n{cut(body, options.max_chars)}"
+
+    def find(self, observation: Observation, text: str, ref: int | None = None) -> str:
+        """The lines of the page that contain text, hidden list items included.
+
+        The search runs over the pruned view with nothing counted away: there a
+        table row is one line, so a match shows the whole row and its refs.
+        """
+        renderer = _Renderer(observation.nodes, ViewOptions(prune=True))
+        lines = renderer.page() if ref is None else renderer.section(ref)
+        if lines is None:
+            return f"ref {ref} is not on the current page."
+        wanted = _clean(text).lower()
+        matches = [line.strip() for line in lines if wanted in line.lower()]
+        if not matches:
+            return f"No line of the page contains {text!r}."
+        shown = matches[:_FIND_MAX_LINES]
+        more = len(matches) - len(shown)
+        tail = [f"… {more} more matching lines; search for a longer text"] if more else []
+        return "\n".join([f"{len(matches)} lines contain {text!r}:", *shown, *tail])
 
     def section(self, observation: Observation, ref: int) -> str | None:
         """Everything under one element, with nothing counted away.

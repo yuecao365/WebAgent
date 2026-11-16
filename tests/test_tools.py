@@ -223,7 +223,7 @@ def test_the_renderer_is_a_plug_point_and_gets_the_previous_page():
 def test_read_page_without_a_section_waits_and_reads_again():
     browser = FakeBrowser()
 
-    outcome = executor(browser).execute("read_page", {"section": None})
+    outcome = executor(browser).execute("read_page", {"section": None, "find": None})
 
     assert outcome.ok
     assert not outcome.acted
@@ -237,7 +237,7 @@ def test_after_read_page_the_next_view_is_the_whole_page_not_a_diff():
 
     tools.view()
     tools.view()
-    tools.execute("read_page", {"section": None})
+    tools.execute("read_page", {"section": None, "find": None})
     tools.view()
     tools.view()
 
@@ -251,13 +251,34 @@ def test_read_page_section_returns_the_detail_separately():
 
     tools = executor(render_section=render_section)
 
-    found = tools.execute("read_page", {"section": 7})
-    missing = tools.execute("read_page", {"section": 8})
+    found = tools.execute("read_page", {"section": 7, "find": None})
+    missing = tools.execute("read_page", {"section": 8, "find": None})
 
     assert found.detail == "row A\nrow B"
     assert found.summary == "Showed element [7] in full (11 characters)."
     assert not missing.ok
     assert "ref 8 is not on the current page" in missing.summary
+
+
+def test_read_page_find_searches_the_page_and_returns_the_matches():
+    asked = []
+
+    def search(observation, text, ref):
+        asked.append((text, ref))
+        return f"1 lines contain {text!r}:\n[30] row: 000000302 | Pending"
+
+    tools = executor(search=search)
+
+    whole_page = tools.execute("read_page", {"section": None, "find": "302"})
+    in_section = tools.execute("read_page", {"section": 104, "find": "302"})
+
+    assert asked == [("302", None), ("302", 104)]
+    assert whole_page.ok
+    assert not whole_page.acted
+    # The history keeps the count; the matching lines are shown once, with the next page.
+    assert whole_page.summary == "1 lines contain '302':"
+    assert whole_page.detail.endswith("[30] row: 000000302 | Pending")
+    assert in_section.ok
 
 
 def test_write_note_returns_the_note():

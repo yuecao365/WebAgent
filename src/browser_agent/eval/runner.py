@@ -323,6 +323,7 @@ def run_task(
             allowed_origins=[origin_of(env.site.url)],
             render=renderer.render,
             render_section=renderer.section,
+            search=renderer.find,
         ),
         events=events,
         config=LoopConfig(

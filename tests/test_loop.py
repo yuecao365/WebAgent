@@ -374,7 +374,7 @@ def test_the_working_note_is_shown_in_the_tail_until_replaced(tmp_path):
 def test_requested_detail_is_shown_once(tmp_path):
     detail = ToolOutcome(True, "Showed element [9] in full (11 characters).", detail="row A\nrow B")
     replies = [
-        reply(call("read_page", section=9)),
+        reply(call("read_page", section=9, find=None)),
         reply(call("click", ref=1)),
         reply(call("finish", **FINISH_OK)),
     ]

@@ -64,6 +64,7 @@ class ScrollArgs(_Args):
 
 class ReadPageArgs(_Args):
     section: int | None
+    find: str | None
 
 
 class WriteNoteArgs(_Args):
@@ -161,15 +162,21 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "read_page",
-        "Read the page again without acting. With section set to an element's ref, show "
-        "that element and everything inside it in full, including items the page text "
-        "left out. With section null, wait for the page and read all of it again.",
+        "Look at the page without acting. With find set, search the whole page for that "
+        "text, including list items the page text left out, and get the matching lines; "
+        "use it to find a row in a long table. With section set to an element's ref, "
+        "show that element and everything inside it in full. With both null, wait for "
+        "the page and read all of it again.",
         _schema(
             {
                 "section": {
                     "type": ["integer", "null"],
-                    "description": "Ref of the element to show in full, or null.",
-                }
+                    "description": "Ref of the element to show in full or to search in, or null.",
+                },
+                "find": {
+                    "type": ["string", "null"],
+                    "description": "Text to search the page for, such as an id or a name, or null.",
+                },
             }
         ),
         ReadPageArgs,
@@ -255,6 +262,8 @@ class PageView:
 ObservationRenderer = Callable[[Observation, Observation | None], str]
 # Renders the part of an observation under one ref, or None if the ref is not there.
 SectionRenderer = Callable[[Observation, int], str | None]
+# Searches an observation (or the part under a ref) for a text; returns the matches.
+PageSearch = Callable[[Observation, str, int | None], str]
 
 MAX_OBSERVATION_CHARS = 300_000
 
@@ -283,7 +292,9 @@ class ToolExecutor:
         allowed_origins: Sequence[str],
         render: ObservationRenderer = full_page,
         render_section: SectionRenderer | None = None,
+        search: PageSearch | None = None,
     ) -> None:
+        self._search = search
         self._browser = browser
         self._allowed_origins = frozenset(origin.lower() for origin in allowed_origins)
         self._render = render
@@ -361,6 +372,11 @@ class ToolExecutor:
         )
 
     def _read(self, args: ReadPageArgs) -> ToolOutcome:
+        if args.find is not None and args.find.strip():
+            if self._search is None:
+                raise ActionError("searching the page is not available in this run")
+            found = self._search(observe(self._browser), args.find, args.section)
+            return ToolOutcome(True, found.splitlines()[0], detail=found)
         if args.section is None:
             self._browser.settle()
             self._show_whole_page = True

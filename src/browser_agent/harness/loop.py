@@ -92,7 +92,9 @@ note replaces the old one, so keep in it what is still needed.
 - Do not change data unless the task asks for it. Do not download files.
 - Work on your own; nobody can answer questions during the task.
 - When an action fails, read the error and try another way instead of repeating it.
-- Filters, sorting and search on the site are usually faster than reading long lists.
+- A long list is shortened and says how many items are not shown. To look for one \
+of them, call read_page with find: it searches the whole page, hidden items included. \
+Use the site's own search, filters and sorting when the list continues on more pages.
 - A search or filter that finds nothing does not prove the thing is missing. Try part \
 of the value or another spelling, or look through the list itself, before you report \
 NOT_FOUND_ERROR.
