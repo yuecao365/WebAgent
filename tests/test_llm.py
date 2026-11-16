@@ -147,6 +147,38 @@ def test_estimate_is_on_the_high_side():
     assert estimate_tokens("", messages, []) >= 2000
 
 
+def test_two_ledgers_on_one_log_see_each_other_and_share_the_cap(tmp_path):
+    """Two runs at the same time: what one spends counts against the cap of both."""
+    first = SpendLedger(tmp_path, budget_usd=1.0)
+    second = SpendLedger(tmp_path, budget_usd=1.0)
+    usage = dict.fromkeys(
+        ("input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens"), 0
+    )
+    entry = {"run": "a", "usage": usage, "cost_usd": 0.4}
+
+    first.record(entry)
+    second.record({**entry, "run": "b"})
+
+    assert first.total_usd == pytest.approx(0.8)
+    assert second.total_usd == pytest.approx(0.8)
+    with pytest.raises(BudgetExceededError) as caught:
+        first.check(reserve_usd=0.3)
+    assert "spent $0.8000 of $1.00" in str(caught.value)
+    first.write_summary()
+    assert "Total: $0.8000 of the $1.00 cap." in (tmp_path / "spend.md").read_text("utf-8")
+
+
+def test_a_line_still_being_written_is_counted_once_it_is_complete(tmp_path):
+    ledger = SpendLedger(tmp_path, budget_usd=1.0)
+    log = tmp_path / "spend.jsonl"
+    log.write_bytes(b'{"cost_usd": 0.25}\n{"cost_usd": 0.5')
+
+    assert ledger.total_usd == pytest.approx(0.25)
+    with log.open("ab") as handle:
+        handle.write(b"}\n")
+    assert ledger.total_usd == pytest.approx(0.75)
+
+
 # -- retries ------------------------------------------------------------------
 
 

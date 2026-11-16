@@ -198,7 +198,9 @@ class SpendLedger:
     """Append-only record of every paid call, and the cap it must stay under.
 
     The cap covers everything in the log, across runs: it is the amount the user
-    agreed to spend in total, not an allowance per run.
+    agreed to spend in total, not an allowance per run. Two runs at the same time
+    write to the same log, so the total is always taken from the log itself; a total
+    kept in memory would leave out what the other run has spent.
     """
 
     def __init__(self, directory: Path, budget_usd: float) -> None:
@@ -206,13 +208,31 @@ class SpendLedger:
         self.budget_usd = budget_usd
         self._jsonl = directory / "spend.jsonl"
         self._markdown = directory / "spend.md"
-        self.total_usd = sum(entry["cost_usd"] for entry in self._read())
+        # How far the log has been read, and the sum of everything up to there.
+        self._offset = 0
+        self._total = 0.0
+
+    @property
+    def total_usd(self) -> float:
+        """Everything in the log, including what another process added since last asked."""
+        if self._jsonl.exists():
+            with self._jsonl.open("rb") as handle:
+                handle.seek(self._offset)
+                added = handle.read()
+            # A line another process is still writing is left for the next look.
+            complete = added[: added.rfind(b"\n") + 1]
+            for line in complete.splitlines():
+                if line.strip():
+                    self._total += json.loads(line)["cost_usd"]
+            self._offset += len(complete)
+        return self._total
 
     def check(self, reserve_usd: float) -> None:
         """Raise unless a call that may cost reserve_usd still fits under the cap."""
-        if self.total_usd + reserve_usd > self.budget_usd:
+        spent = self.total_usd
+        if spent + reserve_usd > self.budget_usd:
             raise BudgetExceededError(
-                f"spent ${self.total_usd:.4f} of ${self.budget_usd:.2f}; the next call "
+                f"spent ${spent:.4f} of ${self.budget_usd:.2f}; the next call "
                 f"may cost up to ${reserve_usd:.4f}"
             )
 
@@ -220,7 +240,6 @@ class SpendLedger:
         self.directory.mkdir(parents=True, exist_ok=True)
         with self._jsonl.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        self.total_usd += entry["cost_usd"]
 
     def write_summary(self) -> None:
         """Rewrite spend.md: one row per run, then the total against the cap."""
