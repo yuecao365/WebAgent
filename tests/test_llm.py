@@ -448,7 +448,8 @@ def _status_error(module, name, status):
     return getattr(module, name)("failed", response=response, body=None)
 
 
-def test_openai_drops_the_effort_setting_first_when_a_request_is_rejected():
+def test_openai_retries_with_effort_none_when_a_request_is_rejected():
+    """gpt-6-luna on this API takes function tools only with reasoning_effort "none"."""
     rejected = _status_error(openai, "BadRequestError", 400)
     provider, recorder = _openai_provider(rejected, _openai_response())
     options = CallOptions(500, "task-7", False, "low")
@@ -459,34 +460,36 @@ def test_openai_drops_the_effort_setting_first_when_a_request_is_rejected():
     assert result.tool_calls[0].name == "click"
     first, second, third = recorder.requests
     assert first["reasoning_effort"] == "low"
-    # Only the effort went; strict tools and the cache key are still there.
-    assert "reasoning_effort" not in second
+    # Only the effort changed; strict tools and the cache key are still there.
+    assert second["reasoning_effort"] == "none"
     assert second["prompt_cache_key"] == "task-7"
     assert second["tools"][0]["function"]["strict"] is True
     # It stays that way afterwards instead of being rejected on every call.
-    assert "reasoning_effort" not in third
+    assert third["reasoning_effort"] == "none"
     assert len(recorder.requests) == 3
 
 
-def test_openai_falls_back_to_a_plain_request_when_that_is_not_enough():
+def test_openai_then_drops_the_effort_field_and_last_every_optional_field():
     rejected = _status_error(openai, "BadRequestError", 400)
-    provider, recorder = _openai_provider(rejected, rejected, _openai_response())
+    provider, recorder = _openai_provider(rejected, rejected, rejected, _openai_response())
     options = CallOptions(500, "task-7", False, "low")
 
     provider.complete("s", HISTORY, TOOLS, options)
     provider.complete("s", HISTORY, TOOLS, options)
 
-    first, _, third, fourth = recorder.requests
-    for request in (third, fourth):
+    first, second, third, fourth, fifth = recorder.requests
+    assert [r.get("reasoning_effort") for r in (first, second, third)] == ["low", "none", None]
+    assert third["prompt_cache_key"] == "task-7"
+    for request in (fourth, fifth):
         assert request["max_tokens"] == 500
         assert "strict" not in request["tools"][0]["function"]
         for name in ("prompt_cache_key", "reasoning_effort", "parallel_tool_calls"):
             assert name not in request
     # What the model is shown is the same in every mode.
-    assert third["messages"] == first["messages"]
+    assert fourth["messages"] == first["messages"]
 
 
-def test_openai_reports_the_first_rejection_when_the_plain_request_fails_too():
+def test_openai_reports_the_first_rejection_when_no_mode_works():
     rejected = _status_error(openai, "BadRequestError", 400)
     provider, recorder = _openai_provider(rejected)
 
@@ -494,7 +497,8 @@ def test_openai_reports_the_first_rejection_when_the_plain_request_fails_too():
         provider.complete("s", HISTORY, TOOLS, PLAIN)
 
     assert caught.value.status_code == 400
-    assert len(recorder.requests) == 2
+    # No effort configured: as is, effort "none", then the plain request.
+    assert len(recorder.requests) == 3
 
 
 @pytest.mark.parametrize(
@@ -697,7 +701,10 @@ def test_output_cap_and_effort_can_be_set_in_env(clean_env):
     config = LLMConfig.from_env()
 
     assert config.max_output_tokens == 1500
-    assert config.effort is None
+    # "none" is a level some models need to be sent; "omit" sends no setting.
+    assert config.effort == "none"
+    clean_env.setenv("LLM_REASONING_EFFORT", "omit")
+    assert LLMConfig.from_env().effort is None
 
 
 def test_claude_models_default_to_the_anthropic_provider(clean_env):

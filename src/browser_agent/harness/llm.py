@@ -303,8 +303,8 @@ class OpenAIProvider:
         # Some compatible endpoints reject the newer request fields. Minimal mode
         # leaves them out; it is switched on after the first such rejection.
         self._minimal = minimal
-        # Models without a reasoning setting reject the field; then only it is dropped.
-        self._no_effort = False
+        # Index of the request mode that last worked; see _send_with_fallback.
+        self._mode = 0
 
     def complete(
         self,
@@ -338,30 +338,33 @@ class OpenAIProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
     ) -> Any:
-        """Send the request; when a field is rejected, send it again with less.
+        """Send the request; when it is rejected, send it again in the next mode.
 
-        First without the effort setting, then without every optional field. The
-        mode that works is kept, so later calls are not rejected again. What the
+        The modes, in order: the effort as configured; effort "none" (some models
+        accept function tools on this API only without reasoning); no effort field
+        (models without the setting); and last a request without any optional field.
+        The mode that works is kept, so later calls are not rejected again. What the
         model is shown is the same in every mode.
         """
-        modes = [(self._no_effort, self._minimal)]
-        if options.effort and not self._no_effort and not self._minimal:
-            modes.append((True, False))
-        if not self._minimal:
-            modes.append((True, True))
+        modes: list[tuple[str | None, bool]] = []
+        for mode in ((options.effort, False), ("none", False), (None, False), (None, True)):
+            if mode not in modes:
+                modes.append(mode)
+        start = len(modes) - 1 if self._minimal else min(self._mode, len(modes) - 1)
         first_error: ModelError | None = None
-        for no_effort, minimal in modes:
-            request = self._request(system, messages, tools, options, minimal, no_effort)
+        for index in range(start, len(modes)):
+            effort, minimal = modes[index]
+            request = self._request(system, messages, tools, options, minimal, effort)
             try:
                 response = self._send(request, first_error)
             except TransientModelError:
                 raise
             except ModelError as exc:
-                if exc.status_code not in (400, 422) or (no_effort, minimal) == modes[-1]:
+                if exc.status_code not in (400, 422) or index == len(modes) - 1:
                     raise
                 first_error = first_error or exc
                 continue
-            self._no_effort, self._minimal = no_effort, minimal
+            self._mode, self._minimal = index, minimal
             return response
         raise first_error or ModelError("no request mode left to try")
 
@@ -372,7 +375,7 @@ class OpenAIProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
         minimal: bool,
-        no_effort: bool,
+        effort: str | None,
     ) -> dict[str, Any]:
         request: dict[str, Any] = {
             "model": self._model,
@@ -386,8 +389,8 @@ class OpenAIProvider:
             request["parallel_tool_calls"] = options.parallel_tools
             if options.cache_key:
                 request["prompt_cache_key"] = options.cache_key
-            if options.effort and not no_effort:
-                request["reasoning_effort"] = options.effort
+            if effort:
+                request["reasoning_effort"] = effort
         return request
 
     def _send(self, request: dict[str, Any], first_error: ModelError | None = None) -> Any:
@@ -639,11 +642,11 @@ DEFAULT_EFFORT = "low"
 
 
 def _env_effort() -> str | None:
-    """LLM_REASONING_EFFORT: a level name, or "none" to send no setting at all."""
+    """LLM_REASONING_EFFORT: a level to send ("none" is a level), or "omit" to send nothing."""
     raw = os.environ.get("LLM_REASONING_EFFORT", "").strip().lower()
     if not raw:
         return DEFAULT_EFFORT
-    return None if raw in ("none", "off", "default") else raw
+    return None if raw == "omit" else raw
 
 
 def _env_float(name: str) -> float | None:
