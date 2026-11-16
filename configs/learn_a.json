@@ -11,6 +11,8 @@
     "max_usd": 2.0
   },
   "switches": {
+    "prune_observation": false,
+    "truncate_lists": false,
     "pages_in_history": true
   }
 }

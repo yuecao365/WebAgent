@@ -827,6 +827,10 @@ DEFAULT_MAX_OUTPUT_TOKENS = 4096
 # The lowest setting most reasoning models accept. Picking an element on a page that
 # is spelled out in text rarely needs more; providers drop it when a model has none.
 DEFAULT_EFFORT = "low"
+# The Responses API takes a reasoning effort together with function tools where
+# Chat Completions refuses it (gpt-6-luna), and it won the learn-task arms. An
+# OpenAI-compatible endpoint that has only Chat Completions sets LLM_API=chat.
+DEFAULT_API = "responses"
 
 
 def _env_effort() -> str | None:
@@ -838,8 +842,8 @@ def _env_effort() -> str | None:
 
 
 def _env_api() -> str:
-    """LLM_API: "chat" (default) or "responses"."""
-    api = os.environ.get("LLM_API", "").strip().lower() or "chat"
+    """LLM_API: "responses" (default) or "chat"."""
+    api = os.environ.get("LLM_API", "").strip().lower() or DEFAULT_API
     if api not in ("chat", "responses"):
         raise ModelError(f"LLM_API must be 'chat' or 'responses', not {api!r}")
     return api
@@ -864,7 +868,7 @@ class LLMConfig:
     openai_minimal: bool = False
     effort: str | None = DEFAULT_EFFORT
     # Which OpenAI API to use: "chat" (Chat Completions) or "responses".
-    api: str = "chat"
+    api: str = DEFAULT_API
 
     @classmethod
     def from_env(cls) -> LLMConfig:

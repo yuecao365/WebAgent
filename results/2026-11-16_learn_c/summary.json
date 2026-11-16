@@ -1,0 +1,33 @@
+{
+  "tasks": 15,
+  "successes": 11,
+  "success_rate": 0.7333333333333333,
+  "mean_tokens": 20412.933333333334,
+  "mean_usd": 0.0017979453333333334,
+  "mean_seconds": 27.034,
+  "mean_steps": 7.133333333333334,
+  "total_usd": 0.026969180000000002,
+  "total_tokens": 306194,
+  "usage": {
+    "input_tokens": 321,
+    "cached_input_tokens": 108008,
+    "cache_write_tokens": 194868,
+    "output_tokens": 2997,
+    "reasoning_tokens": 382
+  },
+  "cache_hit_rate": 0.3562304376362563,
+  "mean_section_tokens": {
+    "system": 4929.533333333334,
+    "tools": 5670.466666666666,
+    "task": 182.53333333333333,
+    "history": 727.7333333333333,
+    "observation": 8623.2,
+    "notes": 54.4,
+    "status": 24.866666666666667
+  },
+  "finish_reasons": {
+    "finished": 15
+  },
+  "resets": 6,
+  "reset_seconds": 428.08
+}

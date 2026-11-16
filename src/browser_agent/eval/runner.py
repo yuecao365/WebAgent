@@ -51,14 +51,18 @@ class BudgetSettings(BaseModel):
 
 
 class Switches(BaseModel):
-    """Context and memory components. Every switch is off unless a config turns it on."""
+    """Context and memory components, each one a switch a config can set.
+
+    A switch starts off. It is turned on here only after a measured comparison chose
+    it: pruning and truncation won the learn-task arms of 2026-11-16 (DECISIONS.md).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     # Observation: show only what can be acted on and what can be read.
-    prune_observation: bool = False
+    prune_observation: bool = True
     # Observation: count the tail of long runs of rows and options instead of listing it.
-    truncate_lists: bool = False
+    truncate_lists: bool = True
     # Observation: show only what changed while the page stays the same document.
     diff_observation: bool = False
     # Run every tool call of a reply instead of only the first.

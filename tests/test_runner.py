@@ -41,10 +41,16 @@ def test_select_tasks_filters_by_split_ids_and_limit(tmp_path):
     assert ids(task_ids=[107, 101]) == [101, 107]
 
 
-def test_switches_are_off_by_default_and_unknown_ones_are_rejected():
+def test_only_the_measured_switches_are_on_by_default_and_unknown_ones_are_rejected():
     config = RunConfig(name="baseline")
 
-    assert not any(config.switches.model_dump().values())
+    # Pruning and truncation were chosen by the learn-task arms; the rest stays off.
+    on = {name for name, value in config.switches.model_dump().items() if value}
+    assert on == {"prune_observation", "truncate_lists"}
+    everything_off = RunConfig.model_validate(
+        {"name": "x", "switches": {"prune_observation": False, "truncate_lists": False}}
+    )
+    assert not any(everything_off.switches.model_dump().values())
     with pytest.raises(ValidationError):
         RunConfig.model_validate({"name": "x", "switches": {"teleport": True}})
     with pytest.raises(ValidationError):

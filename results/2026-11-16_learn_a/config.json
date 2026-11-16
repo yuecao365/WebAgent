@@ -1,0 +1,36 @@
+{
+  "config": {
+    "name": "learn_a",
+    "subset": "configs/subset.json",
+    "split": "learn",
+    "task_ids": null,
+    "limit": null,
+    "reset": "when_dirty",
+    "headless": true,
+    "api": "chat",
+    "reasoning_effort": "none",
+    "budgets": {
+      "max_steps": 30,
+      "max_tokens": 1000000,
+      "max_seconds": 900.0,
+      "max_usd": 2.0
+    },
+    "switches": {
+      "prune_observation": false,
+      "truncate_lists": false,
+      "diff_observation": false,
+      "multi_action": false,
+      "pages_in_history": true
+    }
+  },
+  "model": "gpt-6-luna",
+  "pricing_usd_per_mtok": {
+    "input": 0.1,
+    "output": 0.5,
+    "cached_input": 0.01,
+    "cache_write": 0.125
+  },
+  "site_image": "am1n3e/webarena-verified-shopping_admin:0.1.0",
+  "git_commit": "b2213ba",
+  "dev_response_cache": false
+}

@@ -324,8 +324,8 @@ def config(**changes):
 
 
 def test_the_api_is_selected_by_config():
-    assert isinstance(build_provider(config()), OpenAIProvider)
-    assert isinstance(build_provider(config(api="responses")), OpenAIResponsesProvider)
+    assert isinstance(build_provider(config()), OpenAIResponsesProvider)
+    assert isinstance(build_provider(config(api="chat")), OpenAIProvider)
 
 
 def test_the_api_can_be_set_in_env(monkeypatch):
@@ -339,10 +339,10 @@ def test_the_api_can_be_set_in_env(monkeypatch):
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("LLM_API", raising=False)
-    assert LLMConfig.from_env().api == "chat"
-
-    monkeypatch.setenv("LLM_API", "responses")
     assert LLMConfig.from_env().api == "responses"
+
+    monkeypatch.setenv("LLM_API", "chat")
+    assert LLMConfig.from_env().api == "chat"
 
     monkeypatch.setenv("LLM_API", "assistants")
     with pytest.raises(ModelError, match="LLM_API"):
