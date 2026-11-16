@@ -27,6 +27,8 @@ AUTO_LOGIN_HEADER = "X-M2-Admin-Auto-Login"
 # Pinned by tag so every run uses the same site data (digest sha256:d0531dd27ed9...).
 DEFAULT_IMAGE = "am1n3e/webarena-verified-shopping_admin:0.1.0"
 DEFAULT_CONTAINER = "webarena-verified-shopping_admin"
+# Magento admin grids fetch their rows from this endpoint with an XHR.
+GRID_DATA_PATH = "/mui/index/render"
 
 
 class SiteError(RuntimeError):
@@ -219,6 +221,22 @@ def expected_answer(task: dict[str, Any]) -> tuple[str, str]:
     raise ValueError(f"task {task['task_id']} has no AgentResponseEvaluator")
 
 
+def scorable(task: dict[str, Any]) -> bool:
+    """Whether the official evaluator can pass this task at all.
+
+    For a NAVIGATE task, evaluator 1.2.3 compares only the last page navigation of the
+    trace. Tasks whose expected request is the grid's data call (an XHR) therefore
+    fail even with a correct trace; checked with a hand-built correct trace of task 676.
+    """
+    if expected_answer(task)[0] != "navigate":
+        return True
+    return not any(
+        GRID_DATA_PATH in str(evaluator["expected"].get("url", ""))
+        for evaluator in task["eval"]
+        if evaluator["evaluator"] == "NetworkEventEvaluator"
+    )
+
+
 def build_subset(
     tasks: Sequence[dict[str, Any]],
     quotas: dict[str, int],
@@ -230,16 +248,24 @@ def build_subset(
 
     1. Keep single-site shopping-admin tasks whose expected status is SUCCESS, so a
        template's tasks all exercise the same procedure.
-    2. Keep templates with at least per_template such tasks and a single task type.
-    3. For each task type take quotas[type] templates in a seeded random order,
+    2. Drop templates with a task the evaluator cannot pass (see scorable).
+    3. Keep templates with at least per_template such tasks and a single task type.
+    4. For each task type take quotas[type] templates in a seeded random order,
        skipping a template whose wording is nearly the same as one already taken.
-    4. From each template take the first per_template tasks by id; the first is the
+    5. From each template take the first per_template tasks by id; the first is the
        "learn" task, the others are "test".
     """
     by_template: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for task in tasks:
         if list(task["sites"]) == [SITE] and expected_answer(task)[1] == "SUCCESS":
             by_template[task["intent_template_id"]].append(task)
+    unscorable = sorted(
+        template_id
+        for template_id, members in by_template.items()
+        if not all(scorable(task) for task in members)
+    )
+    for template_id in unscorable:
+        del by_template[template_id]
 
     candidates: dict[str, list[int]] = defaultdict(list)
     for template_id in sorted(by_template):
@@ -249,12 +275,13 @@ def build_subset(
         if len(members) >= per_template and len(types) == 1:
             candidates[types.pop()].append(template_id)
 
-    rng = random.Random(seed)
     chosen: list[tuple[str, int]] = []
     taken_wording: list[str] = []
     for task_type in sorted(quotas):
         order = list(candidates.get(task_type, []))
-        rng.shuffle(order)
+        # One generator per type, so a change in one type's candidates leaves the
+        # other types' choice as it was.
+        random.Random(f"{seed}:{task_type}").shuffle(order)
         picked = 0
         for template_id in order:
             if picked == quotas[task_type]:
@@ -300,6 +327,7 @@ def build_subset(
             "per_template": per_template,
             "seed": seed,
             "max_similarity": max_similarity,
+            "unscorable_templates": unscorable,
         },
         "templates": templates,
         "tasks": entries,

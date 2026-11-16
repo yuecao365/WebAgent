@@ -262,6 +262,20 @@ def test_openai_request_and_reply():
     assert result.usage == Usage(input_tokens=200, cached_input_tokens=1000, output_tokens=30)
 
 
+def test_an_empty_assistant_turn_is_still_a_valid_message():
+    history = [UserMessage("go"), AssistantMessage(""), UserMessage("Reply with a tool call.")]
+    openai_provider, openai_recorder = _openai_provider(_openai_response())
+    anthropic_provider, anthropic_recorder = _anthropic_provider(_anthropic_response())
+
+    openai_provider.complete("s", history, TOOLS, None)
+    anthropic_provider.complete("s", history, TOOLS, None)
+
+    assert openai_recorder.request["messages"][2] == {"role": "assistant", "content": ""}
+    assert anthropic_recorder.request["messages"][1]["content"] == [
+        {"type": "text", "text": "(no reply)"}
+    ]
+
+
 def test_openai_minimal_mode_drops_the_newer_fields():
     provider, recorder = _openai_provider(_openai_response(), minimal=True)
 

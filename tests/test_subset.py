@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from browser_agent.eval.webarena import build_subset, dataset_tasks, expected_answer, load_subset
+from browser_agent.eval.webarena import (
+    build_subset,
+    dataset_tasks,
+    expected_answer,
+    load_subset,
+    scorable,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 WORDINGS = {
@@ -116,6 +122,31 @@ def test_selection_is_reproducible_and_depends_on_the_seed():
     assert len({tuple(ids(seed)) for seed in range(5)}) > 1
 
 
+def grid_navigation(task_id, template):
+    """A navigate task that expects the grid's data request instead of a page load."""
+    entry = task(task_id, template, "navigate")
+    entry["eval"][0]["expected"]["url"] = "__SHOPPING_ADMIN__/mui/index/render/"
+    return entry
+
+
+def test_navigate_tasks_the_evaluator_cannot_pass_exclude_their_template():
+    tasks = [grid_navigation(30 + n, 3) for n in range(3)] + template(9, 90, 3, "navigate")
+
+    subset = build_subset(tasks, {"navigate": 1}, per_template=3)
+
+    assert not scorable(tasks[0])
+    assert scorable(tasks[-1])
+    assert [t["template_id"] for t in subset["templates"]] == [9]
+    assert subset["rules"]["unscorable_templates"] == [3]
+
+
+def test_grid_requests_only_disqualify_navigate_tasks():
+    entry = task(1, 1, "mutate")
+    entry["eval"][0]["expected"]["url"] = "__SHOPPING_ADMIN__/mui/index/render/"
+
+    assert scorable(entry)
+
+
 def test_expected_answer_reads_the_response_evaluator():
     assert expected_answer(task(1, 1, "MUTATE", "SUCCESS")) == ("mutate", "SUCCESS")
 
@@ -146,6 +177,10 @@ def test_checked_in_subset_has_the_agreed_shape(checked_in):
 def test_checked_in_subset_is_what_the_builder_produces(checked_in):
     """Guards against the file and the rules drifting apart."""
     rules = checked_in["rules"]
+    # Template 253 (order lists by status) expects a grid request the evaluator
+    # never looks at for a navigate task.
+    assert rules["unscorable_templates"] == [253]
+    assert 253 not in {t["template_id"] for t in checked_in["templates"]}
 
     rebuilt = build_subset(
         dataset_tasks(),

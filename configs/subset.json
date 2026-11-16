@@ -8,31 +8,12 @@
     },
     "per_template": 4,
     "seed": 0,
-    "max_similarity": 0.8
+    "max_similarity": 0.8,
+    "unscorable_templates": [
+      253
+    ]
   },
   "templates": [
-    {
-      "template_id": 234,
-      "task_type": "retrieve",
-      "intent_template": "Get the {{attribute}} of the customer who has the most cancellations in the history{{retrieved_data_format_spec}}",
-      "task_ids": [
-        288,
-        289,
-        290,
-        291
-      ]
-    },
-    {
-      "template_id": 242,
-      "task_type": "mutate",
-      "intent_template": "Disable {{product}} from the site, they are facing some quality issues.",
-      "task_ids": [
-        453,
-        454,
-        455,
-        456
-      ]
-    },
     {
       "template_id": 246,
       "task_type": "mutate",
@@ -42,6 +23,17 @@
         773,
         774,
         775
+      ]
+    },
+    {
+      "template_id": 247,
+      "task_type": "mutate",
+      "intent_template": "{{action}} the price of the product on the current page by {{amount}}",
+      "task_ids": [
+        458,
+        459,
+        460,
+        461
       ]
     },
     {
@@ -56,36 +48,25 @@
       ]
     },
     {
-      "template_id": 250,
+      "template_id": 249,
       "task_type": "retrieve",
-      "intent_template": "Get title and rating for all reviews with 4 stars or above for {{product}}. {{retrieved_data_format_spec}}.",
+      "intent_template": "Get the title and rating for all reviews with 3 stars or below for {{product}}. {{retrieved_data_format_spec}}.",
       "task_ids": [
-        119,
-        120,
-        121,
-        122
+        213,
+        214,
+        215,
+        216
       ]
     },
     {
-      "template_id": 252,
+      "template_id": 257,
       "task_type": "mutate",
-      "intent_template": "Add {{option_spec}} to {{base_setting}} {{product}}",
+      "intent_template": "Cancel order {{id}}",
       "task_ids": [
-        547,
-        548,
-        549,
-        550
-      ]
-    },
-    {
-      "template_id": 253,
-      "task_type": "navigate",
-      "intent_template": "Go to the list of orders that are {{status}}",
-      "task_ids": [
-        676,
-        677,
-        678,
-        679
+        470,
+        471,
+        472,
+        473
       ]
     },
     {
@@ -111,6 +92,17 @@
       ]
     },
     {
+      "template_id": 271,
+      "task_type": "navigate",
+      "intent_template": "Show the {{type}} report from {{start_date}} to {{end_date}}.",
+      "task_ids": [
+        709,
+        710,
+        711,
+        712
+      ]
+    },
+    {
       "template_id": 275,
       "task_type": "mutate",
       "intent_template": "Change the page title of \"{{old_heading}}\" page on my site to \"{{heading}}\".",
@@ -119,17 +111,6 @@
         487,
         488,
         489
-      ]
-    },
-    {
-      "template_id": 276,
-      "task_type": "retrieve",
-      "intent_template": "Get customer email(s) who {{order_criteria}} in the entire history",
-      "task_ids": [
-        62,
-        63,
-        64,
-        65
       ]
     },
     {
@@ -155,6 +136,17 @@
       ]
     },
     {
+      "template_id": 288,
+      "task_type": "retrieve",
+      "intent_template": "Get the total number of reviews that our store received so far that mention term \"{{term}}\"",
+      "task_ids": [
+        11,
+        12,
+        13,
+        14
+      ]
+    },
+    {
       "template_id": 364,
       "task_type": "retrieve",
       "intent_template": "Get the customer name and email with phone number {{PhoneNum}}. {{retrieved_data_format_spec}}.",
@@ -175,65 +167,20 @@
         200,
         202
       ]
+    },
+    {
+      "template_id": 1002,
+      "task_type": "retrieve",
+      "intent_template": "What's the total number of items sold in the most recent {{k}} complete orders?",
+      "task_ids": [
+        128,
+        129,
+        130,
+        131
+      ]
     }
   ],
   "tasks": [
-    {
-      "task_id": 288,
-      "template_id": 234,
-      "split": "learn",
-      "task_type": "retrieve",
-      "intent": "Get the email of the customer who has the most cancellations in the history"
-    },
-    {
-      "task_id": 289,
-      "template_id": 234,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get the email address, name, phone number of the customer who has the most cancellations in the history. Return a list of objects with keys \"name\", \"email\", and \"phone_number\"."
-    },
-    {
-      "task_id": 290,
-      "template_id": 234,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get the product SKUs in the most recent cancelled orders of the customer who has the most cancellations in the history"
-    },
-    {
-      "task_id": 291,
-      "template_id": 234,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get the total spend on products in the most recent cancelled orders excluding shipping and handling of the customer who has the most cancellations in the historyReturn the value as a number (e.g., 10.99) only, without any additional details"
-    },
-    {
-      "task_id": 453,
-      "template_id": 242,
-      "split": "learn",
-      "task_type": "mutate",
-      "intent": "Disable Teton pullover hoodie from the site, they are facing some quality issues."
-    },
-    {
-      "task_id": 454,
-      "template_id": 242,
-      "split": "test",
-      "task_type": "mutate",
-      "intent": "Disable Ryker Tee Crew Neck from the site, they are facing some quality issues."
-    },
-    {
-      "task_id": 455,
-      "template_id": 242,
-      "split": "test",
-      "task_type": "mutate",
-      "intent": "Disable Helios Endurance Tank from the site, they are facing some quality issues."
-    },
-    {
-      "task_id": 456,
-      "template_id": 242,
-      "split": "test",
-      "task_type": "mutate",
-      "intent": "Disable Cora Pant from the site, they are facing some quality issues."
-    },
     {
       "task_id": 772,
       "template_id": 246,
@@ -261,6 +208,34 @@
       "split": "test",
       "task_type": "mutate",
       "intent": "Delete all reviews from the scammer Arden"
+    },
+    {
+      "task_id": 458,
+      "template_id": 247,
+      "split": "learn",
+      "task_type": "mutate",
+      "intent": "Reduce the price of the product on the current page by $5"
+    },
+    {
+      "task_id": 459,
+      "template_id": 247,
+      "split": "test",
+      "task_type": "mutate",
+      "intent": "Reduce the price of the product on the current page by 10%"
+    },
+    {
+      "task_id": 460,
+      "template_id": 247,
+      "split": "test",
+      "task_type": "mutate",
+      "intent": "Reduce the price of the product on the current page by 15%"
+    },
+    {
+      "task_id": 461,
+      "template_id": 247,
+      "split": "test",
+      "task_type": "mutate",
+      "intent": "Increase the price of the product on the current page by $11.5"
     },
     {
       "task_id": 344,
@@ -291,88 +266,60 @@
       "intent": "How many reviews did our shop receive from the beginning of the shop?"
     },
     {
-      "task_id": 119,
-      "template_id": 250,
+      "task_id": 213,
+      "template_id": 249,
       "split": "learn",
       "task_type": "retrieve",
-      "intent": "Get title and rating for all reviews with 4 stars or above for Antonia Racer Tank. Return a list of objects with keys \"title\" and \"rating\"."
+      "intent": "Get the title and rating for all reviews with 3 stars or below for Antonia Racer Tank. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
-      "task_id": 120,
-      "template_id": 250,
+      "task_id": 214,
+      "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
-      "intent": "Get title and rating for all reviews with 4 stars or above for Ana Running Short. Return a list of objects with keys \"title\" and \"rating\"."
+      "intent": "Get the title and rating for all reviews with 3 stars or below for Erica Sports Bra. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
-      "task_id": 121,
-      "template_id": 250,
+      "task_id": 215,
+      "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
-      "intent": "Get title and rating for all reviews with 4 stars or above for Circe hooded fleece. Return a list of objects with keys \"title\" and \"rating\"."
+      "intent": "Get the title and rating for all reviews with 3 stars or below for Circe ice fleece. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
-      "task_id": 122,
-      "template_id": 250,
+      "task_id": 216,
+      "template_id": 249,
       "split": "test",
       "task_type": "retrieve",
-      "intent": "Get title and rating for all reviews with 4 stars or above for Olivia zip jacket. Return a list of objects with keys \"title\" and \"rating\"."
+      "intent": "Get the title and rating for all reviews with 3 stars or below for Electra Bra Top. Return a list of objects with keys \"title\" and \"rating\"."
     },
     {
-      "task_id": 547,
-      "template_id": 252,
+      "task_id": 470,
+      "template_id": 257,
       "split": "learn",
       "task_type": "mutate",
-      "intent": "Add a new color option brown to the size S of Phoebe Zipper Sweatshirt"
+      "intent": "Cancel order 302"
     },
     {
-      "task_id": 548,
-      "template_id": 252,
+      "task_id": 471,
+      "template_id": 257,
       "split": "test",
       "task_type": "mutate",
-      "intent": "Add a new color blue to size S and M of Frankie Sweatshirt"
+      "intent": "Cancel order 307"
     },
     {
-      "task_id": 549,
-      "template_id": 252,
+      "task_id": 472,
+      "template_id": 257,
       "split": "test",
       "task_type": "mutate",
-      "intent": "Add a new size XXXL to green Minerva LumaTech V-Tee"
+      "intent": "Cancel order 299"
     },
     {
-      "task_id": 550,
-      "template_id": 252,
+      "task_id": 473,
+      "template_id": 257,
       "split": "test",
       "task_type": "mutate",
-      "intent": "Add a new size XXS to blue and purple Nona Fitness Tank"
-    },
-    {
-      "task_id": 676,
-      "template_id": 253,
-      "split": "learn",
-      "task_type": "navigate",
-      "intent": "Go to the list of orders that are suspected of being fraudulent"
-    },
-    {
-      "task_id": 677,
-      "template_id": 253,
-      "split": "test",
-      "task_type": "navigate",
-      "intent": "Go to the list of orders that are processing"
-    },
-    {
-      "task_id": 678,
-      "template_id": 253,
-      "split": "test",
-      "task_type": "navigate",
-      "intent": "Go to the list of orders that are canceled"
-    },
-    {
-      "task_id": 679,
-      "template_id": 253,
-      "split": "test",
-      "task_type": "navigate",
-      "intent": "Go to the list of orders that are completed"
+      "intent": "Cancel order 301"
     },
     {
       "task_id": 704,
@@ -431,6 +378,34 @@
       "intent": "Get the monthly count of completed orders from Jan 2022 through Nov 2022, inclusive. Return a list of objects with keys \"month\" (month name) and \"count\" (as integer) only, without any additional details."
     },
     {
+      "task_id": 709,
+      "template_id": 271,
+      "split": "learn",
+      "task_type": "navigate",
+      "intent": "Show the orders report from May 1, 2021 to March 31, 2022."
+    },
+    {
+      "task_id": 710,
+      "template_id": 271,
+      "split": "test",
+      "task_type": "navigate",
+      "intent": "Show the shipping report from August 5, 2022 to March 1, 2023."
+    },
+    {
+      "task_id": 711,
+      "template_id": 271,
+      "split": "test",
+      "task_type": "navigate",
+      "intent": "Show the product view report from July 5, 2021 to May 31, 2023."
+    },
+    {
+      "task_id": 712,
+      "template_id": 271,
+      "split": "test",
+      "task_type": "navigate",
+      "intent": "Show the coupons report from May 1, 2021 to May 15, 2023."
+    },
+    {
       "task_id": 486,
       "template_id": 275,
       "split": "learn",
@@ -457,34 +432,6 @@
       "split": "test",
       "task_type": "mutate",
       "intent": "Change the page title of \"Privacy Policy\" page on my site to \"No privacy policy is needed in this dystopian world\"."
-    },
-    {
-      "task_id": 62,
-      "template_id": 276,
-      "split": "learn",
-      "task_type": "retrieve",
-      "intent": "Get customer email(s) who completed the most number of orders in the entire history"
-    },
-    {
-      "task_id": 63,
-      "template_id": 276,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get customer email(s) who completed the second most number of orders in the entire history"
-    },
-    {
-      "task_id": 64,
-      "template_id": 276,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get customer email(s) who have 2 orders in any state in the entire history"
-    },
-    {
-      "task_id": 65,
-      "template_id": 276,
-      "split": "test",
-      "task_type": "retrieve",
-      "intent": "Get customer email(s) who completed the fifth most number of orders in the entire history"
     },
     {
       "task_id": 492,
@@ -543,6 +490,34 @@
       "intent": "Update order #304 with the USPS tracking number 13849373987"
     },
     {
+      "task_id": 11,
+      "template_id": 288,
+      "split": "learn",
+      "task_type": "retrieve",
+      "intent": "Get the total number of reviews that our store received so far that mention term \"disappointed\""
+    },
+    {
+      "task_id": 12,
+      "template_id": 288,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "Get the total number of reviews that our store received so far that mention term \"satisfied\""
+    },
+    {
+      "task_id": 13,
+      "template_id": 288,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "Get the total number of reviews that our store received so far that mention term \"decent\""
+    },
+    {
+      "task_id": 14,
+      "template_id": 288,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "Get the total number of reviews that our store received so far that mention term \"not useful\""
+    },
+    {
       "task_id": 208,
       "template_id": 364,
       "split": "learn",
@@ -597,6 +572,34 @@
       "split": "test",
       "task_type": "retrieve",
       "intent": "Get the date of the most recent cancelled order.Return the date in YYYY-MM-DD format or null if not available, without any additional details"
+    },
+    {
+      "task_id": 128,
+      "template_id": 1002,
+      "split": "learn",
+      "task_type": "retrieve",
+      "intent": "What's the total number of items sold in the most recent 2 complete orders?"
+    },
+    {
+      "task_id": 129,
+      "template_id": 1002,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "What's the total number of items sold in the most recent 4 complete orders?"
+    },
+    {
+      "task_id": 130,
+      "template_id": 1002,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "What's the total number of items sold in the most recent 5 complete orders?"
+    },
+    {
+      "task_id": 131,
+      "template_id": 1002,
+      "split": "test",
+      "task_type": "retrieve",
+      "intent": "What's the total number of items sold in the most recent 7 complete orders?"
     }
   ]
 }

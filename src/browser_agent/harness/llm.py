@@ -307,7 +307,9 @@ class OpenAIProvider:
                 "tool_call_id": message.tool_call_id,
                 "content": message.content,
             }
-        encoded: dict[str, Any] = {"role": "assistant", "content": message.text or None}
+        # A turn needs content or tool calls; an empty reply is sent back as "".
+        content = message.text or (None if message.tool_calls else "")
+        encoded: dict[str, Any] = {"role": "assistant", "content": content}
         if message.tool_calls:
             encoded["tool_calls"] = [
                 {
@@ -426,6 +428,9 @@ class AnthropicProvider:
                         }
                         for call in message.tool_calls
                     ]
+                if not content:
+                    # The API rejects an empty assistant turn.
+                    content = [{"type": "text", "text": "(no reply)"}]
                 encoded.append({"role": "assistant", "content": content})
             else:
                 block = {
