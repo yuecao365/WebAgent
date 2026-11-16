@@ -68,7 +68,10 @@ Every task produces a trace. Failed tasks are classified (element not found, wro
 page, finished early, over budget).
 
 Every context and memory component has a switch, off by default. An experiment is a
-config that turns switches on, so one codebase produces E1–E3.
+config that turns switches on, so one codebase produces E1–E3. A switch becomes on by
+default only after a comparison run shows it helps, with the evidence in
+`DECISIONS.md`; observation pruning and list truncation are on by default for this
+reason (learn-task arms, 2026-11-16).
 
 ## 4. Stack
 

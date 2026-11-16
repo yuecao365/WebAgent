@@ -30,7 +30,9 @@ Read `DESIGN.md` before starting. Record decisions in `DECISIONS.md`.
 - Build on browser-harness (MIT). Prefer depending on it and wrapping it; copy and
   modify a module only when wrapping is not enough, and keep its license notice.
 - Every context and memory component has a switch, off by default. Experiments are
-  configs that turn switches on.
+  configs that turn switches on. A switch may become on by default only after a
+  comparison run shows it helps; record the runs and numbers in `DECISIONS.md`.
+  The switch stays, so a config can still turn it off.
 - Keep modules small and typed. Docstrings and comments say why, not what.
 - Model calls go through one module (`harness/llm.py`) that handles retries,
   structured output, token and cost accounting.
