@@ -339,3 +339,25 @@ def test_a_run_directory_is_read_back_from_its_traces(tmp_path):
 def test_every_kind_has_a_label_and_says_what_recovered_means(kind):
     assert kind.label
     assert kind.recovered is None or len(kind.recovered) > 5
+
+
+def test_the_check_before_finishing_has_its_own_numbers(tmp_path):
+    checking = LoopConfig(verify_before_finish=True)
+    other = reply(call("finish", **{**FINISH_OK, "retrieved_data": '["43"]'}))
+    look = reply(call("read_page", section=None, find="x"))
+    changed = scored(events_of(tmp_path, [FINISH, look, other], config=checking), True)
+    same = scored(events_of(tmp_path / "b", [FINISH, FINISH], config=checking), False)
+    off = scored(events_of(tmp_path / "c", [FINISH]), True)
+
+    ledger = build_ledger(TaskLog(n, events) for n, events in enumerate([changed, same, off]))
+
+    assert ledger["self_check"] == {
+        "triggered": 2,
+        "answer_changed": 1,
+        "extra_steps": 3,
+        "task_successes": 1,
+    }
+    row = ledger["rows"]["self_check"]
+    assert (row["triggers"], row["tasks"], row["recovered"], row["task_successes"]) == (2, 2, 1, 1)
+    text = ledger_markdown(ledger)
+    assert "Check before finishing: triggered in 2 tasks, answer changed in 1, 3 extra" in text

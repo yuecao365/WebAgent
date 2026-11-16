@@ -19,6 +19,7 @@ from browser_agent.harness.loop import (
     AFTER_FAILURE,
     AFTER_NAVIGATION,
     BAD_ARGUMENTS,
+    CHECK_REQUEST,
     EMPTY_NOTE,
     EXTRA_CALL,
     NUDGE,
@@ -503,3 +504,95 @@ def test_a_note_can_ride_along_with_an_action(tmp_path):
 
     assert [name for name, _ in executor.executed] == ["write_note", "click", "finish"]
     assert tail(provider, 1)["notes"] == "Working note:\ntotal: 30.50"
+
+
+# -- the check before finishing -------------------------------------------------
+
+CHECKING = LoopConfig(verify_before_finish=True)
+OTHER_ANSWER = {**FINISH_OK, "retrieved_data": '["43"]'}
+
+
+def test_the_first_finish_is_held_back_once_for_a_check(tmp_path):
+    first = call("finish", **FINISH_OK)
+    replies = [
+        reply(first),
+        reply(call("read_page", section=None, find="total")),
+        reply(call("finish", **OTHER_ANSWER)),
+    ]
+    result, provider, _, events, _ = run(tmp_path, replies, config=CHECKING)
+
+    # The request is the finish call's own result, and it is not an error.
+    assert provider.calls[1]["messages"][-2] == ToolMessage(first.id, CHECK_REQUEST)
+    assert "check your answer once against the page now shown" in CHECK_REQUEST
+    checks = [event for event in events.events if event["type"] == "self_check"]
+    assert [(event["step"], event["first"]["retrieved_data"]) for event in checks] == [(1, ["42"])]
+    # The second finish ends the task, with the answer given then.
+    assert result.reason == "finished"
+    assert not result.forced
+    assert result.steps == 3
+    assert result.finish.response()["retrieved_data"] == ["43"]
+    assert events.events[-1]["kept_first_finish"] is False
+
+
+def test_the_second_finish_ends_the_task_even_when_it_repeats_the_first(tmp_path):
+    replies = [reply(call("finish", **FINISH_OK)), reply(call("finish", **FINISH_OK))]
+    result, provider, _, events, _ = run(tmp_path, replies, config=CHECKING)
+
+    assert result.reason == "finished"
+    assert result.steps == 2
+    assert len(provider.calls) == 2
+    assert kinds(events).count("self_check") == 1
+
+
+def test_without_the_switch_the_first_finish_ends_the_task(tmp_path):
+    result, _, _, events, _ = run(tmp_path, [reply(call("finish", **FINISH_OK))])
+
+    assert result.steps == 1
+    assert "self_check" not in kinds(events)
+
+
+def test_a_forced_finish_skips_the_check(tmp_path):
+    config = LoopConfig(budgets=Budgets(max_steps=1), verify_before_finish=True)
+    replies = [reply(call("click", ref=1)), reply(call("finish", **FINISH_OK))]
+    result, provider, _, events, _ = run(tmp_path, replies, config=config)
+
+    assert result.reason == "budget_steps"
+    assert result.forced
+    assert result.finish is not None
+    assert len(provider.calls) == 2
+    assert "self_check" not in kinds(events)
+
+
+def test_an_invalid_finish_is_not_what_gets_checked(tmp_path):
+    bad = {**FINISH_OK, "status": "DONE"}
+    replies = [
+        reply(call("finish", **bad)),
+        reply(call("finish", **FINISH_OK)),
+        reply(call("finish", **FINISH_OK)),
+    ]
+    result, provider, _, events, _ = run(tmp_path, replies, config=CHECKING)
+
+    assert "Invalid arguments for finish" in text_of(provider.calls[1]["messages"][-2])
+    assert [event["step"] for event in events.events if event["type"] == "self_check"] == [2]
+    assert result.steps == 3
+
+
+def test_a_task_that_ends_during_the_check_keeps_the_answer_it_had(tmp_path):
+    config = LoopConfig(budgets=Budgets(max_steps=1), verify_before_finish=True)
+    replies = [reply(call("finish", **FINISH_OK)), reply(text="I am not sure.")]
+    result, _, _, events, _ = run(tmp_path, replies, config=config)
+
+    assert result.reason == "budget_steps"
+    assert result.finish.response()["retrieved_data"] == ["42"]
+    assert events.events[-1]["kept_first_finish"] is True
+    assert events.events[-1]["response"]["retrieved_data"] == ["42"]
+
+
+def test_the_check_changes_neither_the_system_prompt_nor_the_tools(tmp_path):
+    replies = [reply(call("finish", **FINISH_OK)), reply(call("finish", **FINISH_OK))]
+    _, checked, _, _, _ = run(tmp_path / "on", replies, config=CHECKING)
+    _, plain, _, _, _ = run(tmp_path / "off", [reply(call("finish", **FINISH_OK))])
+
+    for request in checked.calls:
+        assert request["system"] == plain.calls[0]["system"]
+        assert request["tools"] == plain.calls[0]["tools"]

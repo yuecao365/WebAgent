@@ -134,6 +134,19 @@ AFTER_NAVIGATION = (
     "old page are gone. Look at the page now shown and send the call again if needed."
 )
 BAD_ARGUMENTS = "The arguments were not a JSON object. Send the call again with valid JSON."
+# The tool result of the first finish when verify_before_finish is on. It is the
+# same text for every task: it is built from nothing but the fact that finish was
+# called, so nothing of the task's expected answer or type can leak into it.
+CHECK_REQUEST = (
+    "Not finished yet: check your answer once against the page now shown, then call "
+    "finish again.\n"
+    "- If you report an action as done, look for the evidence on the page: a success "
+    "message, the item gone, the field showing the new value. If the evidence is "
+    "missing, do the action now.\n"
+    "- If your answer holds numbers or a list, recount or reread them from the page, "
+    "preferably with read_page and find, or on a report page, not from memory.\n"
+    "The next finish ends the task, with the answer you give then."
+)
 # How the event log names the reason a call was not run.
 _SKIP_REASONS = {
     EXTRA_CALL: "single_action",
@@ -169,6 +182,9 @@ class LoopConfig:
     # This is the behaviour before the cache-friendly layout: the prompt grows by a
     # whole page per step. It exists as the "full history" arm of experiments.
     pages_in_history: bool = False
+    # Hold back the first finish of a task once and ask the model to check its answer
+    # against the page. The second finish ends the task as it is.
+    verify_before_finish: bool = False
 
 
 @dataclass(frozen=True)
@@ -222,6 +238,8 @@ class AgentLoop:
         self._replayed = 0
         self._steps = 0
         self._started = 0.0
+        # The answer of the finish that was held back for the check, if one was.
+        self._held_back: FinishArgs | None = None
 
     def run(self, goal: str) -> RunResult:
         config = self._config
@@ -413,12 +431,18 @@ class AgentLoop:
                 skip_reason = AFTER_NAVIGATION
         return outcomes
 
-    def _run_tool(self, call: ToolCall) -> ToolOutcome:
+    def _run_tool(self, call: ToolCall, forced: bool = False) -> ToolOutcome:
         self._events.append("tool_call", step=self._steps, name=call.name, arguments=call.arguments)
         if call.arguments is None:
             outcome = ToolOutcome(False, BAD_ARGUMENTS)
         else:
             outcome = self._executor.execute(call.name, call.arguments)
+        if outcome.finish is not None and self._check_is_due(forced):
+            # The request travels as this call's result: the history only grows at
+            # its end, and the system prompt and the tool list stay as they are.
+            self._held_back = outcome.finish
+            self._events.append("self_check", step=self._steps, first=outcome.finish.response())
+            outcome = ToolOutcome(True, CHECK_REQUEST)
         self._events.append(
             "tool_result",
             step=self._steps,
@@ -428,6 +452,10 @@ class AgentLoop:
             content=outcome.summary,
         )
         return outcome
+
+    def _check_is_due(self, forced: bool) -> bool:
+        """Once per task, and never on a finish the harness itself demanded."""
+        return self._config.verify_before_finish and not forced and self._held_back is None
 
     def _exhausted_budget(self) -> str | None:
         budgets = self._config.budgets
@@ -470,7 +498,7 @@ class AgentLoop:
             return self._model_failed(reason, exc, forced=True)
         for call in reply.tool_calls:
             if call.name == FINISH_TOOL.name and call.arguments is not None:
-                outcome = self._run_tool(call)
+                outcome = self._run_tool(call, forced=True)
                 if outcome.finish is not None:
                     return self._end(reason, finish=outcome.finish, forced=True)
         return self._end(reason, forced=True, error="no finish call after the budget ran out")
@@ -482,6 +510,11 @@ class AgentLoop:
         forced: bool = False,
         error: str | None = None,
     ) -> RunResult:
+        kept_first = finish is None and self._held_back is not None
+        if kept_first:
+            # The task ended during the check without a second finish. The answer
+            # the model had already given stands, rather than no answer at all.
+            finish = self._held_back
         result = RunResult(
             reason=reason,
             finish=finish,
@@ -500,6 +533,7 @@ class AgentLoop:
             forced=forced,
             error=error,
             response=finish.response() if finish else None,
+            kept_first_finish=kept_first,
             steps=result.steps,
             usage=asdict(result.usage),
             sections=result.sections,

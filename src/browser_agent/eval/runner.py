@@ -70,6 +70,8 @@ class Switches(BaseModel):
     multi_action: bool = False
     # Keep every step's page in the history: the "full history" arm of experiments.
     pages_in_history: bool = False
+    # Hold back the first finish once and ask the model to check its answer on the page.
+    verify_before_finish: bool = False
 
     def view_options(self) -> ViewOptions:
         return ViewOptions(
@@ -340,6 +342,7 @@ def run_task(
             budgets=Budgets(**config.budgets.model_dump()),
             multi_action=config.switches.multi_action,
             pages_in_history=config.switches.pages_in_history,
+            verify_before_finish=config.switches.verify_before_finish,
         ),
     )
     result = loop.run(task.intent)

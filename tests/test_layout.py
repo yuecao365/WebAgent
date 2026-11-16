@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import itertools
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -76,10 +77,11 @@ class AnthropicClient:
         return SimpleNamespace(content=content, usage=usage, stop_reason="tool_use")
 
 
-def run_task(tmp_path, provider):
+def run_task(tmp_path, provider, config=None):
     ledger = SpendLedger(tmp_path / "results", 100.0)
     client = LLMClient(provider, PRICING, ledger, "model").labelled(run="r", task_id=7)
-    AgentLoop(client, FakeExecutor(), EventLog(), LoopConfig()).run("Report the order total")
+    loop = AgentLoop(client, FakeExecutor(), EventLog(), config or LoopConfig())
+    loop.run("Report the order total")
 
 
 def dumps(value):
@@ -101,6 +103,32 @@ def test_each_openai_request_starts_with_the_previous_one_minus_its_tail(tmp_pat
         assert later["prompt_cache_key"] == earlier["prompt_cache_key"] == "browser-agent-r-7"
         # The history grew by exactly the step's call and its result.
         assert len(later["messages"]) == len(earlier["messages"]) + 2
+
+
+def test_the_check_before_finishing_keeps_the_prefix_stable(tmp_path, monkeypatch):
+    """The held-back finish and the request are two more history entries, nothing else."""
+    longer = [*SCRIPT, ("read_page", {"section": None, "find": "total"}), ("finish", FINISH_OK)]
+    plain = OpenAIClient()
+    run_task(tmp_path / "off", OpenAIProvider(plain, "model"))
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT", longer)
+    checked = OpenAIClient()
+    checking = LoopConfig(verify_before_finish=True)
+    run_task(tmp_path / "on", OpenAIProvider(checked, "model"), checking)
+
+    assert len(checked.requests) == len(plain.requests) + 2
+    for earlier, later in itertools.pairwise(checked.requests):
+        stable = dumps(earlier["messages"][:-1])[:-1]
+        assert dumps(later["messages"]).startswith(stable)
+        assert dumps(later["tools"]) == dumps(earlier["tools"])
+        assert later["messages"][0] == earlier["messages"][0]
+        assert len(later["messages"]) == len(earlier["messages"]) + 2
+    # Up to the first finish the two runs send byte-identical requests.
+    shared = len(plain.requests)
+    assert dumps(checked.requests[:shared]) == dumps(plain.requests)
+    # The request is the result of the finish call, at the end of the history.
+    request = checked.requests[shared]["messages"][-2]
+    assert request["role"] == "tool"
+    assert request["content"].startswith("Not finished yet")
 
 
 def test_only_the_tail_carries_what_changes_every_step(tmp_path):
