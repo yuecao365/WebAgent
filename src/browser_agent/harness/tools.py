@@ -1,7 +1,11 @@
 """The tools the model can call, with strict schemas.
 
-`run_skill` and `write_note` from DESIGN.md section 1 need the memory and context
-components and are added with them.
+A tool call returns a short result: what was done, what changed and any error. It
+never returns the page. The page is read once per step with `ToolExecutor.view()`
+and shown only at the end of the prompt, so the history stays small and stable.
+
+`run_skill` from DESIGN.md section 1 needs the memory components and is added with
+them.
 """
 
 from __future__ import annotations
@@ -28,6 +32,13 @@ Status = Literal[
     "UNKNOWN_ERROR",
 ]
 
+# A result line is kept in the history for the rest of the task, so it stays short.
+MAX_SUMMARY_CHARS = 500
+
+_PAGE_STATE_JS = (
+    "JSON.stringify({url: location.href, title: document.title, doc: performance.timeOrigin})"
+)
+
 
 class _Args(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -52,7 +63,11 @@ class ScrollArgs(_Args):
 
 
 class ReadPageArgs(_Args):
-    pass
+    section: int | None
+
+
+class WriteNoteArgs(_Args):
+    text: str
 
 
 class FinishArgs(_Args):
@@ -146,10 +161,26 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "read_page",
-        "Read the current page again without acting, for example after waiting for it "
-        "to finish loading.",
-        _schema({}),
+        "Read the page again without acting. With section set to an element's ref, show "
+        "that element and everything inside it in full, including items the page text "
+        "left out. With section null, wait for the page and read all of it again.",
+        _schema(
+            {
+                "section": {
+                    "type": ["integer", "null"],
+                    "description": "Ref of the element to show in full, or null.",
+                }
+            }
+        ),
         ReadPageArgs,
+    ),
+    ToolSpec(
+        "write_note",
+        "Replace your working note. Only the current page is shown to you; earlier "
+        "pages are gone. Keep here what you will need later: facts and values you "
+        "found, what is done, what is next.",
+        _schema({"text": {"type": "string", "description": "The whole note, replacing the old."}}),
+        WriteNoteArgs,
     ),
     ToolSpec(
         "finish",
@@ -197,35 +228,68 @@ class ToolOutcome:
     """What a tool call produced."""
 
     ok: bool
-    content: str
+    # Status, what changed and the error if any. This is what the history keeps.
+    summary: str
     finish: FinishArgs | None = None
-    # Set when the call read the page, so the loop can notice an unchanged page.
-    fingerprint: str | None = None
-    url: str | None = None
+    # write_note: the new working note.
+    note: str | None = None
+    # The document was replaced, so refs from the page before no longer exist.
+    navigated: bool = False
+    # read_page(section): text to show once, with the next page view.
+    detail: str | None = None
+    # The call acted on the page (as opposed to reading, noting or finishing).
+    acted: bool = False
 
 
-ObservationRenderer = Callable[[Observation], str]
+@dataclass(frozen=True)
+class PageView:
+    """The current page as the model is shown it."""
+
+    text: str
+    fingerprint: str
+    url: str
+    title: str
+
+
+# Renders an observation, given the previous one of the same task (None at the start).
+ObservationRenderer = Callable[[Observation, Observation | None], str]
+# Renders the part of an observation under one ref, or None if the ref is not there.
+SectionRenderer = Callable[[Observation, int], str | None]
+
+MAX_OBSERVATION_CHARS = 300_000
+
+
+def full_page(observation: Observation, previous: Observation | None) -> str:
+    """The plain view: header and the complete outline."""
+    return observation.render(MAX_OBSERVATION_CHARS)
+
+
+def _shorten(text: str) -> str:
+    if len(text) <= MAX_SUMMARY_CHARS:
+        return text
+    return f"{text[:MAX_SUMMARY_CHARS]}… [{len(text) - MAX_SUMMARY_CHARS} more characters]"
 
 
 class ToolExecutor:
     """Validate tool calls and run them against a browser.
 
-    render_observation is the plug point for observation components (pruning, diff):
-    the default shows the full observation.
+    render and render_section are the plug points for observation components
+    (pruning, truncation, diff); the defaults show the complete page.
     """
 
     def __init__(
         self,
         browser: Browser,
         allowed_origins: Sequence[str],
-        render_observation: ObservationRenderer = Observation.render,
-        max_observation_chars: int | None = 300_000,
+        render: ObservationRenderer = full_page,
+        render_section: SectionRenderer | None = None,
     ) -> None:
         self._browser = browser
         self._allowed_origins = frozenset(origin.lower() for origin in allowed_origins)
-        self._render = render_observation
-        self._max_chars = max_observation_chars
+        self._render = render
+        self._render_section = render_section
         self._specs = {spec.name: spec for spec in TOOLS}
+        self._previous: Observation | None = None
 
     def execute(self, name: str, arguments: Any) -> ToolOutcome:
         """Run one tool call; every failure comes back as an outcome the model can read."""
@@ -239,48 +303,93 @@ class ToolExecutor:
                 f"{'.'.join(str(part) for part in err['loc']) or 'arguments'}: {err['msg']}"
                 for err in exc.errors()
             )
-            return ToolOutcome(False, f"Invalid arguments for {name}: {problems}")
+            return ToolOutcome(False, _shorten(f"Invalid arguments for {name}: {problems}"))
         if isinstance(args, FinishArgs):
             return ToolOutcome(True, "Task finished.", finish=args)
+        if isinstance(args, WriteNoteArgs):
+            return ToolOutcome(True, "Note saved.", note=args.text)
         try:
-            message = self._act(args)
-            return self._with_page(message)
+            if isinstance(args, ReadPageArgs):
+                return self._read(args)
+            return self._act(args)
         except (ActionError, BrowserError) as exc:
-            return ToolOutcome(False, f"{name} failed: {exc}")
+            return ToolOutcome(False, _shorten(f"{name} failed: {exc}"), acted=True)
 
-    def read_page(self) -> ToolOutcome:
-        """The current page, used for the first observation of a task."""
-        try:
-            return self._with_page("")
-        except BrowserError as exc:
-            return ToolOutcome(False, f"read_page failed: {exc}")
+    def view(self) -> PageView:
+        """Read the page as it is now. Called once per step, after the step's calls."""
+        observation = observe(self._browser)
+        text = self._render(observation, self._previous)
+        self._previous = observation
+        return PageView(text, observation.fingerprint(), observation.url, observation.title)
 
     def recover(self, url: str) -> ToolOutcome:
         """Return to a page that worked before, after repeated failures."""
         try:
             actions.goto(self._browser, url)
-            return self._with_page(f"Returned to the last page that worked: {url}")
         except (ActionError, BrowserError) as exc:
-            return ToolOutcome(False, f"Could not return to {url}: {exc}")
+            return ToolOutcome(False, _shorten(f"Could not return to {url}: {exc}"))
+        return ToolOutcome(True, f"Returned to the last page that worked: {url}", navigated=True)
 
-    def _act(self, args: _Args) -> str:
+    # -- internals ---------------------------------------------------------
+
+    def _act(self, args: _Args) -> ToolOutcome:
+        before = self._page_state()
         if isinstance(args, ClickArgs):
-            return actions.click(self._browser, args.ref)
-        if isinstance(args, TypeArgs):
-            return actions.type_text(self._browser, args.ref, args.text, args.submit)
-        if isinstance(args, GotoArgs):
+            message = actions.click(self._browser, args.ref)
+        elif isinstance(args, TypeArgs):
+            message = actions.type_text(self._browser, args.ref, args.text, args.submit)
+        elif isinstance(args, GotoArgs):
             if origin_of(args.url) not in self._allowed_origins:
                 allowed = ", ".join(sorted(self._allowed_origins))
                 raise ActionError(f"{args.url} is outside the task's site; allowed: {allowed}")
-            return actions.goto(self._browser, args.url)
-        if isinstance(args, ScrollArgs):
-            return actions.scroll(self._browser, args.direction)
-        return ""  # read_page: nothing to do before reading
-
-    def _with_page(self, message: str) -> ToolOutcome:
-        observation = observe(self._browser, max_chars=self._max_chars)
-        text = self._render(observation)
-        content = f"{message}\n\n{text}" if message else text
+            message = actions.goto(self._browser, args.url)
+        elif isinstance(args, ScrollArgs):
+            message = actions.scroll(self._browser, args.direction)
+        else:  # pragma: no cover - every tool is handled above
+            raise ActionError(f"no handler for {type(args).__name__}")
+        after = self._page_state()
+        navigated = after["doc"] != before["doc"]
+        changes = list(after["dialogs"])
+        if navigated or after["url"] != before["url"]:
+            changes.append(f"Now on: {after['title']} ({after['url']})")
         return ToolOutcome(
-            True, content, fingerprint=observation.fingerprint(), url=observation.url
+            True, _shorten(" ".join([message, *changes])), navigated=navigated, acted=True
         )
+
+    def _read(self, args: ReadPageArgs) -> ToolOutcome:
+        if args.section is None:
+            self._browser.settle()
+            return ToolOutcome(True, "Read the page again.")
+        if self._render_section is None:
+            return ToolOutcome(True, "The page text already shows every element in full.")
+        section = self._render_section(observe(self._browser), args.section)
+        if section is None:
+            raise ActionError(
+                f"ref {args.section} is not on the current page; use a ref from the page text"
+            )
+        return ToolOutcome(
+            True,
+            f"Showed element [{args.section}] in full ({len(section)} characters).",
+            detail=section,
+        )
+
+    def _page_state(self) -> dict[str, Any]:
+        """URL, title and document identity, closing any native dialog first."""
+        dialogs: list[str] = []
+        dialog = self._browser.pending_dialog()
+        if dialog is not None:
+            # A native dialog freezes the page's scripts until it is answered.
+            self._browser.cdp("Page.handleJavaScriptDialog", accept=True)
+            dialogs.append(
+                f"Dialog accepted: {dialog.get('type', 'dialog')}: {dialog.get('message', '')}"
+            )
+        evaluated = self._browser.cdp(
+            "Runtime.evaluate", expression=_PAGE_STATE_JS, returnByValue=True
+        )
+        state = json.loads(evaluated.get("result", {}).get("value") or "{}")
+        return {
+            "url": state.get("url", ""),
+            "title": state.get("title", ""),
+            "doc": state.get("doc"),
+            "dialogs": dialogs,
+        }

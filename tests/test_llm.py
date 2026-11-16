@@ -14,6 +14,7 @@ from browser_agent.harness.llm import (
     AnthropicProvider,
     AssistantMessage,
     BudgetExceededError,
+    CallOptions,
     LLMConfig,
     ModelError,
     OpenAIProvider,
@@ -247,15 +248,22 @@ def test_parse_arguments():
 
 
 class _Recorder:
-    def __init__(self, result):
-        self.result = result
-        self.request = None
+    """Stands in for an SDK endpoint: records requests, returns the queued results."""
+
+    def __init__(self, *results):
+        self.results = list(results)
+        self.requests = []
+
+    @property
+    def request(self):
+        return self.requests[-1]
 
     def create(self, **request):
-        self.request = request
-        if isinstance(self.result, Exception):
-            raise self.result
-        return self.result
+        self.requests.append(request)
+        result = self.results.pop(0) if len(self.results) > 1 else self.results[0]
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 def _openai_response():
@@ -275,28 +283,35 @@ def _openai_response():
     )
 
 
-def _openai_provider(result, **kwargs):
-    recorder = _Recorder(result)
+def _openai_provider(*results, **kwargs):
+    recorder = _Recorder(*results)
     client = SimpleNamespace(chat=SimpleNamespace(completions=recorder))
     return OpenAIProvider(client, "some-model", **kwargs), recorder
 
 
 HISTORY = [
-    UserMessage("Task: x"),
+    UserMessage("Task: x", section="task"),
     AssistantMessage("", (ToolCall("c0", "click", {"ref": 1}, '{"ref": 1}'),)),
     ToolMessage("c0", "Clicked [1]."),
+    UserMessage(
+        [Part("observation", "Current page:\n[5] button"), Part("status", "Step 2 of 30.")]
+    ),
 ]
+PLAIN = CallOptions()
 
 
 def test_openai_request_and_reply():
     provider, recorder = _openai_provider(_openai_response())
+    options = CallOptions(max_output_tokens=500, cache_key="task-7", effort="low")
 
-    result = provider.complete("be brief", HISTORY, TOOLS, 500)
+    result = provider.complete("be brief", HISTORY, TOOLS, options)
 
     request = recorder.request
     assert request["model"] == "some-model"
     assert request["parallel_tool_calls"] is False
     assert request["max_completion_tokens"] == 500
+    assert request["prompt_cache_key"] == "task-7"
+    assert request["reasoning_effort"] == "low"
     assert request["messages"][0] == {"role": "system", "content": "be brief"}
     assert request["messages"][2]["tool_calls"][0] == {
         "id": "c0",
@@ -308,10 +323,24 @@ def test_openai_request_and_reply():
         "tool_call_id": "c0",
         "content": "Clicked [1].",
     }
+    assert request["messages"][4] == {
+        "role": "user",
+        "content": "Current page:\n[5] button\n\nStep 2 of 30.",
+    }
     assert all(tool["function"]["strict"] is True for tool in request["tools"])
     assert result.tool_calls == (ToolCall("c1", "click", {"ref": 4}, '{"ref": 4}'),)
     # Cached tokens are part of prompt_tokens and must not be counted twice.
     assert result.usage == Usage(input_tokens=200, cached_input_tokens=1000, output_tokens=30)
+
+
+def test_openai_leaves_out_what_was_not_asked_for():
+    provider, recorder = _openai_provider(_openai_response())
+
+    provider.complete("s", HISTORY, TOOLS, PLAIN)
+
+    assert "prompt_cache_key" not in recorder.request
+    assert "reasoning_effort" not in recorder.request
+    assert "max_completion_tokens" not in recorder.request
 
 
 def test_an_empty_assistant_turn_is_still_a_valid_message():
@@ -319,8 +348,8 @@ def test_an_empty_assistant_turn_is_still_a_valid_message():
     openai_provider, openai_recorder = _openai_provider(_openai_response())
     anthropic_provider, anthropic_recorder = _anthropic_provider(_anthropic_response())
 
-    openai_provider.complete("s", history, TOOLS, None)
-    anthropic_provider.complete("s", history, TOOLS, None)
+    openai_provider.complete("s", history, TOOLS, PLAIN)
+    anthropic_provider.complete("s", history, TOOLS, PLAIN)
 
     assert openai_recorder.request["messages"][2] == {"role": "assistant", "content": ""}
     assert anthropic_recorder.request["messages"][1]["content"] == [
@@ -331,11 +360,13 @@ def test_an_empty_assistant_turn_is_still_a_valid_message():
 def test_openai_minimal_mode_drops_the_newer_fields():
     provider, recorder = _openai_provider(_openai_response(), minimal=True)
 
-    provider.complete("s", HISTORY, TOOLS, 500)
+    provider.complete("s", HISTORY, TOOLS, CallOptions(500, "task-7", True, "low"))
 
-    assert "parallel_tool_calls" not in recorder.request
-    assert recorder.request["max_tokens"] == 500
-    assert "strict" not in recorder.request["tools"][0]["function"]
+    request = recorder.request
+    assert request["max_tokens"] == 500
+    assert "strict" not in request["tools"][0]["function"]
+    for field in ("parallel_tool_calls", "prompt_cache_key", "reasoning_effort"):
+        assert field not in request
 
 
 def _status_error(module, name, status):
@@ -344,29 +375,60 @@ def _status_error(module, name, status):
     return getattr(module, name)("failed", response=response, body=None)
 
 
+def test_openai_falls_back_to_a_plain_request_when_a_field_is_rejected():
+    rejected = _status_error(openai, "BadRequestError", 400)
+    provider, recorder = _openai_provider(rejected, _openai_response())
+
+    result = provider.complete("s", HISTORY, TOOLS, CallOptions(500, "task-7", False, "low"))
+    provider.complete("s", HISTORY, TOOLS, CallOptions(500, "task-7", False, "low"))
+
+    assert result.tool_calls[0].name == "click"
+    first, second, third = recorder.requests
+    assert "prompt_cache_key" in first
+    assert "prompt_cache_key" not in second
+    assert second["max_tokens"] == 500
+    # It stays plain afterwards instead of being rejected on every call.
+    assert "prompt_cache_key" not in third
+    # What the model is shown is the same either way.
+    assert second["messages"] == first["messages"]
+
+
+def test_openai_reports_the_first_rejection_when_the_plain_request_fails_too():
+    rejected = _status_error(openai, "BadRequestError", 400)
+    provider, recorder = _openai_provider(rejected)
+
+    with pytest.raises(ModelError) as caught:
+        provider.complete("s", HISTORY, TOOLS, PLAIN)
+
+    assert caught.value.status_code == 400
+    assert len(recorder.requests) == 2
+
+
 @pytest.mark.parametrize(
-    ("error", "expected"),
+    ("error", "expected", "attempts"),
     [
-        (_status_error(openai, "RateLimitError", 429), TransientModelError),
-        (_status_error(openai, "InternalServerError", 503), TransientModelError),
+        (_status_error(openai, "RateLimitError", 429), TransientModelError, 1),
+        (_status_error(openai, "InternalServerError", 503), TransientModelError, 1),
         (
             openai.APITimeoutError(request=httpx2.Request("POST", "http://model.test/v1")),
             TransientModelError,
+            1,
         ),
-        (_status_error(openai, "BadRequestError", 400), ModelError),
+        (_status_error(openai, "AuthenticationError", 401), ModelError, 1),
     ],
 )
-def test_openai_errors_map_to_retryable_or_fatal(error, expected):
-    provider, _ = _openai_provider(error)
+def test_openai_errors_map_to_retryable_or_fatal(error, expected, attempts):
+    provider, recorder = _openai_provider(error)
 
     with pytest.raises(ModelError) as caught:
-        provider.complete("s", HISTORY, TOOLS, None)
+        provider.complete("s", HISTORY, TOOLS, PLAIN)
 
     assert type(caught.value) is expected
+    assert len(recorder.requests) == attempts
 
 
-def _anthropic_provider(result, **kwargs):
-    recorder = _Recorder(result)
+def _anthropic_provider(*results, **kwargs):
+    recorder = _Recorder(*results)
     return AnthropicProvider(SimpleNamespace(messages=recorder), "claude-test", **kwargs), recorder
 
 
@@ -387,48 +449,86 @@ def _anthropic_response():
 
 def test_anthropic_request_and_reply():
     provider, recorder = _anthropic_provider(_anthropic_response())
-    history = [*HISTORY, UserMessage("continue")]
 
-    result = provider.complete("be brief", history, TOOLS, None)
+    result = provider.complete("be brief", HISTORY, TOOLS, CallOptions(effort="low"))
 
     request = recorder.request
-    assert request["system"] == "be brief"
+    mark = {"type": "ephemeral"}
+    assert request["system"] == [{"type": "text", "text": "be brief", "cache_control": mark}]
     assert request["max_tokens"] == 16_000
     assert request["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
-    assert "cache_control" not in request
+    assert request["output_config"] == {"effort": "low"}
     assert all(tool["strict"] is True for tool in request["tools"])
     assert all(tool["input_schema"]["additionalProperties"] is False for tool in request["tools"])
     assert [m["role"] for m in request["messages"]] == ["user", "assistant", "user", "user"]
+    assert request["messages"][0]["content"] == [
+        {"type": "text", "text": "Task: x", "cache_control": mark}
+    ]
     assert request["messages"][1]["content"] == [
         {"type": "tool_use", "id": "c0", "name": "click", "input": {"ref": 1}}
     ]
     assert request["messages"][2]["content"] == [
-        {"type": "tool_result", "tool_use_id": "c0", "content": "Clicked [1].", "is_error": False}
+        {
+            "type": "tool_result",
+            "tool_use_id": "c0",
+            "content": "Clicked [1].",
+            "is_error": False,
+            "cache_control": mark,
+        }
+    ]
+    # The tail: one block per part, none of them marked for caching.
+    assert request["messages"][3]["content"] == [
+        {"type": "text", "text": "Current page:\n[5] button"},
+        {"type": "text", "text": "Step 2 of 30."},
     ]
     assert result.text == "Opening the menu."
     assert result.tool_calls[0].arguments == {"ref": 9}
     assert result.usage == Usage(300, 4000, 50, 80)
 
 
+def test_anthropic_groups_the_results_of_one_turn():
+    calls = (ToolCall("a", "type", {}, "{}"), ToolCall("b", "click", {}, "{}"))
+    history = [
+        UserMessage("Task: x", section="task"),
+        AssistantMessage("", calls),
+        ToolMessage("a", "Typed."),
+        ToolMessage("b", "Clicked."),
+        UserMessage("tail"),
+    ]
+    provider, recorder = _anthropic_provider(_anthropic_response())
+
+    provider.complete("s", history, TOOLS, PLAIN)
+
+    results = recorder.request["messages"][2]["content"]
+    assert [block["tool_use_id"] for block in results] == ["a", "b"]
+    # One breakpoint at the end of the history, on the last result.
+    assert "cache_control" not in results[0]
+    assert "cache_control" in results[1]
+
+
 def test_anthropic_turn_is_replayed_unchanged():
     """Thinking blocks only survive if the provider's own content goes back as it came."""
     response = _anthropic_response()
     provider, recorder = _anthropic_provider(response)
-    first = provider.complete("s", [UserMessage("go")], TOOLS, None)
+    first = provider.complete("s", [UserMessage("go")], TOOLS, PLAIN)
 
-    provider.complete(
-        "s", [UserMessage("go"), first.message(), ToolMessage("t1", "ok")], TOOLS, None
-    )
+    history = [UserMessage("go"), first.message(), ToolMessage("t1", "ok"), UserMessage("tail")]
+    provider.complete("s", history, TOOLS, PLAIN)
 
     assert recorder.request["messages"][1]["content"] is response.content
 
 
-def test_anthropic_prompt_caching_is_a_switch():
-    provider, recorder = _anthropic_provider(_anthropic_response(), prompt_caching=True)
+def test_anthropic_drops_the_effort_setting_when_the_model_rejects_it():
+    rejected = _status_error(anthropic, "BadRequestError", 400)
+    provider, recorder = _anthropic_provider(rejected, _anthropic_response())
 
-    provider.complete("s", [UserMessage("go")], TOOLS, None)
+    provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low"))
+    provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low"))
 
-    assert recorder.request["cache_control"] == {"type": "ephemeral"}
+    first, second, third = recorder.requests
+    assert "output_config" in first
+    assert "output_config" not in second
+    assert "output_config" not in third
 
 
 @pytest.mark.parametrize(
@@ -440,12 +540,14 @@ def test_anthropic_prompt_caching_is_a_switch():
     ],
 )
 def test_anthropic_errors_map_to_retryable_or_fatal(error, expected):
-    provider, _ = _anthropic_provider(error)
+    provider, recorder = _anthropic_provider(error)
 
     with pytest.raises(ModelError) as caught:
-        provider.complete("s", [UserMessage("go")], TOOLS, None)
+        provider.complete("s", [UserMessage("go")], TOOLS, PLAIN)
 
     assert type(caught.value) is expected
+    # Without an effort setting there is nothing to drop, so no second attempt.
+    assert len(recorder.requests) == 1
 
 
 # -- configuration ------------------------------------------------------------

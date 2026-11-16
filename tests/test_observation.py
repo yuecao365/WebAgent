@@ -157,7 +157,18 @@ def test_an_open_dialog_is_accepted_and_reported():
 def test_oversized_pages_are_cut_and_say_so():
     browser = FakeBrowser([node(n, "button", f"Button {n}") for n in range(1, 200)])
 
-    page = observe(browser, max_chars=500)
+    text = observe(browser).render(max_chars=500)
 
-    assert len(page.tree) < 600
-    assert page.tree.splitlines()[-1].startswith("[observation cut: ")
+    assert len(text) < 700
+    assert text.splitlines()[-1].startswith("[cut: ")
+    assert "more characters not shown" in text
+
+
+def test_a_reload_is_a_new_document():
+    browser = FakeBrowser([node(1, "button", "Search")])
+    first = observe(browser)
+
+    browser.cdp("Page.navigate", url=browser.url)
+
+    assert observe(browser).document != first.document
+    assert observe(browser).fingerprint() == first.fingerprint()

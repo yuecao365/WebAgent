@@ -59,6 +59,10 @@ class Step:
 
     index: int
     text: str = ""
+    # The page the model was shown at this step. The prompt keeps no old pages, so
+    # the log is the only place they can be read back from.
+    page: str = ""
+    url: str = ""
     forced: bool = False
     usage: dict[str, int] = field(default_factory=dict)
     cost_usd: float = 0.0
@@ -86,14 +90,19 @@ def replay(events: Iterable[dict[str, Any]]) -> Replay:
     """Rebuild the step sequence of a task from its events."""
     result = Replay()
     current: Step | None = None
+    shown: dict[str, Any] = {}
     for event in events:
         kind = event["type"]
         if kind == "task_start":
             result.goal = event.get("goal", "")
+        elif kind == "observation":
+            shown = event
         elif kind == "model_call":
             current = Step(
                 index=event["step"],
                 text=event.get("text", ""),
+                page=shown.get("text", ""),
+                url=shown.get("url", ""),
                 forced=event.get("forced", False),
                 usage=event.get("usage", {}),
                 cost_usd=event.get("cost_usd", 0.0),

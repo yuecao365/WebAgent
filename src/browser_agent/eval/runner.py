@@ -49,7 +49,8 @@ class Switches(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    prompt_caching: bool = False
+    # Run every tool call of a reply instead of only the first.
+    multi_action: bool = False
 
 
 class RunConfig(BaseModel):
@@ -215,7 +216,10 @@ def run_task(
         llm=llm.labelled(run=run_dir.name, task_id=task.task_id),
         executor=ToolExecutor(browser, allowed_origins=[origin_of(env.site.url)]),
         events=events,
-        config=LoopConfig(budgets=Budgets(**config.budgets.model_dump())),
+        config=LoopConfig(
+            budgets=Budgets(**config.budgets.model_dump()),
+            multi_action=config.switches.multi_action,
+        ),
     )
     result = loop.run(task.intent)
 
@@ -276,7 +280,7 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False) -> Path:
     load_dotenv(root / ".env")
     os.environ["BH_TELEMETRY"] = "0"
     results = root / "results"
-    llm = client_from_env(results, prompt_caching=config.switches.prompt_caching)
+    llm = client_from_env(results, parallel_tools=config.switches.multi_action)
     env = ShoppingAdmin(SiteConfig.from_env())
     data_dir = Path(os.environ.get("BROWSER_AGENT_DATA_DIR", "").strip() or root / "data")
     browser_path = os.environ.get("BROWSER_PATH", "").strip()

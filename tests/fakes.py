@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from browser_agent.browser.session import BrowserError
 from browser_agent.harness.llm import LLMClient, Pricing, Reply, SpendLedger, ToolCall, Usage
-from browser_agent.harness.tools import FinishArgs, ToolOutcome
+from browser_agent.harness.tools import FinishArgs, PageView, ToolOutcome
 
 FIXTURES = Path(__file__).parent / "fixtures"
 _ids = itertools.count(1)
@@ -41,9 +41,14 @@ class ScriptedProvider:
         self.replies = list(replies)
         self.calls: list[dict[str, Any]] = []
 
-    def complete(self, system, messages, tools, max_output_tokens):
+    def complete(self, system, messages, tools, options):
         self.calls.append(
-            {"system": system, "messages": list(messages), "tools": [t.name for t in tools]}
+            {
+                "system": system,
+                "messages": list(messages),
+                "tools": [t.name for t in tools],
+                "options": options,
+            }
         )
         item = self.replies.pop(0)
         if isinstance(item, Exception):
@@ -60,58 +65,61 @@ def make_client(tmp_path: Path, replies: list[Any], budget_usd: float = 100.0, *
 
 
 class FakeExecutor:
-    """A ToolExecutor whose outcomes are scripted.
+    """A ToolExecutor whose outcomes and pages are scripted.
 
-    Without a script every action succeeds and shows a new page, so a test only has
-    to describe the calls it cares about.
+    Without a script every action succeeds and leads to a new page, so a test only
+    has to describe the calls it cares about. `pages` overrides what view() returns.
     """
 
-    def __init__(self, outcomes: list[ToolOutcome] | None = None) -> None:
+    def __init__(
+        self, outcomes: list[ToolOutcome] | None = None, pages: list[str] | None = None
+    ) -> None:
         self.outcomes = list(outcomes or [])
+        self.pages = list(pages or [])
         self.executed: list[tuple[str, Any]] = []
         self.recovered: list[str] = []
-        self._page = itertools.count(1)
+        self.views = 0
+        self._page = 1
 
-    def _fresh(self, message: str) -> ToolOutcome:
-        number = next(self._page)
-        return ToolOutcome(
-            True,
-            f"{message} page {number}",
-            fingerprint=f"fp{number}",
-            url=f"http://site.test/p{number}",
-        )
-
-    def read_page(self) -> ToolOutcome:
-        return self._fresh("start")
+    def view(self) -> PageView:
+        self.views += 1
+        if self.pages:
+            name = self.pages.pop(0) if len(self.pages) > 1 else self.pages[0]
+        else:
+            name = f"p{self._page}"
+        return PageView(f"page {name}", f"fp-{name}", f"http://site.test/{name}", f"Title {name}")
 
     def execute(self, name: str, arguments: Any) -> ToolOutcome:
         self.executed.append((name, arguments))
         if name == "finish":
             try:
-                return ToolOutcome(
-                    True, "Task finished.", finish=FinishArgs.model_validate(arguments)
-                )
+                finish = FinishArgs.model_validate(arguments)
             except ValidationError as exc:
                 return ToolOutcome(False, f"Invalid arguments for finish: {exc.errors()[0]['msg']}")
+            return ToolOutcome(True, "Task finished.", finish=finish)
+        if name == "write_note":
+            return ToolOutcome(True, "Note saved.", note=arguments["text"])
         if self.outcomes:
-            return self.outcomes.pop(0)
-        return self._fresh(name)
+            outcome = self.outcomes.pop(0)
+        else:
+            outcome = ToolOutcome(True, f"{name} done.", acted=True)
+        if outcome.ok and outcome.acted:
+            self._page += 1
+        return outcome
 
     def recover(self, url: str) -> ToolOutcome:
         self.recovered.append(url)
-        return ToolOutcome(
-            True, f"Returned to the last page that worked: {url}", fingerprint="rec", url=url
-        )
+        return ToolOutcome(True, f"Returned to the last page that worked: {url}", navigated=True)
 
 
 def failed(message: str = "click failed: no such element") -> ToolOutcome:
-    return ToolOutcome(False, message)
+    return ToolOutcome(False, message, acted=True)
 
 
-def same_page(fingerprint: str = "same") -> ToolOutcome:
-    return ToolOutcome(
-        True, "nothing changed", fingerprint=fingerprint, url="http://site.test/same"
-    )
+def navigated(
+    message: str = "Clicked [1]. Now on: Orders (http://site.test/orders)",
+) -> ToolOutcome:
+    return ToolOutcome(True, message, navigated=True, acted=True)
 
 
 class FakeBrowser:
@@ -121,10 +129,14 @@ class FakeBrowser:
         self.nodes = nodes or []
         self.url = "http://site.test/admin/"
         self.title = "Admin"
+        # Identity of the loaded document; a navigation replaces it.
+        self.document = 1
         # ref -> what the page reports about the element behind it
         self.elements: dict[int, dict[str, Any]] = {}
         self.quads: dict[int, list[list[float]]] = {}
         self.options: dict[int, list[str]] = {}
+        # refs whose click loads a new document, with the URL it leads to
+        self.links: dict[int, str] = {}
         self.navigate_error: str | None = None
         self.dialog: dict[str, Any] | None = None
         self.cdp_calls: list[tuple[str, dict[str, Any]]] = []
@@ -134,6 +146,7 @@ class FakeBrowser:
         self.wheels: list[float] = []
         self.scripts: list[str] = []
         self.settled = 0
+        self._last_ref: int | None = None
 
     def element(self, ref: int, tag: str = "button", **flags: bool) -> None:
         self.elements[ref] = {
@@ -151,17 +164,9 @@ class FakeBrowser:
     def cdp(self, method: str, **params: Any) -> dict[str, Any]:
         self.cdp_calls.append((method, params))
         if method == "Runtime.evaluate":
+            info: dict[str, Any] = {"w": 1280, "h": 900}
             if "location.href" in params["expression"]:
-                info = {
-                    "url": self.url,
-                    "title": self.title,
-                    "w": 1280,
-                    "h": 900,
-                    "sy": 0,
-                    "ph": 2000,
-                }
-            else:
-                info = {"w": 1280, "h": 900}
+                info.update(url=self.url, title=self.title, sy=0, ph=2000, doc=self.document)
             return {"result": {"value": json.dumps(info)}}
         if method == "Accessibility.getFullAXTree":
             return {"nodes": self.nodes}
@@ -169,10 +174,12 @@ class FakeBrowser:
             if self.navigate_error:
                 return {"errorText": self.navigate_error}
             self.url = params["url"]
+            self.document += 1
             return {"frameId": "F"}
         if method == "DOM.resolveNode":
             if params["backendNodeId"] not in self.elements:
                 raise BrowserError("DOM.resolveNode failed: No node with given id found")
+            self._last_ref = params["backendNodeId"]
             return {"object": {"objectId": str(params["backendNodeId"])}}
         if method == "DOM.getContentQuads":
             return {"quads": self.quads.get(params["backendNodeId"], [])}
@@ -196,6 +203,11 @@ class FakeBrowser:
 
     def click_at(self, x: float, y: float) -> None:
         self.clicks.append((x, y))
+        target = self.links.get(self._last_ref or -1)
+        if target is not None:
+            self.url = target
+            self.title = "Next page"
+            self.document += 1
 
     def insert_text(self, text: str) -> None:
         self.typed.append(text)

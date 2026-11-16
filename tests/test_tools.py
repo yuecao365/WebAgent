@@ -6,7 +6,13 @@ import json
 
 import pytest
 
-from browser_agent.harness.tools import FINISH_TOOL, TOOLS, FinishArgs, ToolExecutor
+from browser_agent.harness.tools import (
+    FINISH_TOOL,
+    MAX_SUMMARY_CHARS,
+    TOOLS,
+    FinishArgs,
+    ToolExecutor,
+)
 
 from fakes import FakeBrowser, load_fixture
 
@@ -15,10 +21,10 @@ def executor(browser=None, **kwargs):
     return ToolExecutor(browser or FakeBrowser(), allowed_origins=["http://site.test"], **kwargs)
 
 
-def test_tool_set_matches_the_design_without_memory_tools():
+def test_tool_set():
     names = [tool.name for tool in TOOLS]
 
-    assert names == ["click", "type", "goto", "scroll", "read_page", "finish"]
+    assert names == ["click", "type", "goto", "scroll", "read_page", "write_note", "finish"]
     assert FINISH_TOOL.name == "finish"
 
 
@@ -49,6 +55,8 @@ BAD_FINISH = {
         ("click", {"ref": 12, "button": "left"}, "button"),
         ("type", {"ref": 3, "text": "x"}, "submit"),
         ("scroll", {"direction": "left"}, "direction"),
+        ("read_page", {}, "section"),
+        ("write_note", {"text": 5}, "text"),
         ("finish", BAD_FINISH, "task_type"),
     ],
 )
@@ -56,15 +64,15 @@ def test_invalid_arguments_are_explained_to_the_model(name, arguments, problem):
     outcome = executor().execute(name, arguments)
 
     assert not outcome.ok
-    assert outcome.content.startswith(f"Invalid arguments for {name}:")
-    assert problem in outcome.content
+    assert outcome.summary.startswith(f"Invalid arguments for {name}:")
+    assert problem in outcome.summary
 
 
 def test_unknown_tool():
     outcome = executor().execute("hover", {"ref": 1})
 
     assert not outcome.ok
-    assert "Unknown tool 'hover'" in outcome.content
+    assert "Unknown tool 'hover'" in outcome.summary
 
 
 def test_finish_parses_the_json_answer():
@@ -100,7 +108,7 @@ def test_finish_rejects_data_that_is_not_a_json_array(data):
 
     assert not outcome.ok
     assert outcome.finish is None
-    assert "retrieved_data" in outcome.content
+    assert "retrieved_data" in outcome.summary
 
 
 def test_finish_without_data():
@@ -109,48 +117,141 @@ def test_finish_without_data():
     assert args.response()["retrieved_data"] is None
 
 
-def test_an_action_returns_the_page_after_it():
+def test_an_action_returns_a_short_result_not_the_page():
     browser = FakeBrowser(load_fixture("ax_login.json"))
     browser.element(11)
 
     outcome = executor(browser).execute("click", {"ref": 11})
 
     assert outcome.ok
-    assert outcome.content.startswith("Clicked [11].\n\nURL: http://site.test/admin/")
-    assert 'textbox "Username *"' in outcome.content
-    assert outcome.url == "http://site.test/admin/"
-    assert len(outcome.fingerprint) == 16
+    assert outcome.acted
+    assert outcome.summary == "Clicked [11]."
+    assert not outcome.navigated
     assert browser.clicks == [(60.0, 40.0)]
 
 
-def test_read_page_does_not_act():
-    browser = FakeBrowser(load_fixture("ax_login.json"))
+def test_a_click_that_loads_a_page_says_where_it_led():
+    browser = FakeBrowser()
+    browser.element(11, tag="a")
+    browser.links[11] = "http://site.test/admin/sales/order/"
 
-    outcome = executor(browser).execute("read_page", {})
+    outcome = executor(browser).execute("click", {"ref": 11})
 
-    assert outcome.ok
-    assert outcome.content.startswith("URL: http://site.test/admin/")
-    assert browser.clicks == []
-    assert browser.typed == []
+    assert outcome.navigated
+    assert (
+        outcome.summary == "Clicked [11]. Now on: Next page (http://site.test/admin/sales/order/)"
+    )
 
 
-def test_goto_is_limited_to_the_task_site():
+def test_goto_reports_the_new_page_and_is_limited_to_the_task_site():
     browser = FakeBrowser()
 
     blocked = executor(browser).execute("goto", {"url": "https://example.com/"})
     allowed = executor(browser).execute("goto", {"url": "http://site.test/admin/sales/"})
 
     assert not blocked.ok
-    assert "outside the task's site" in blocked.content
+    assert "outside the task's site" in blocked.summary
     assert allowed.ok
+    assert allowed.navigated
+    assert allowed.summary.endswith("Now on: Admin (http://site.test/admin/sales/)")
     assert browser.url == "http://site.test/admin/sales/"
+
+
+def test_a_dialog_that_opens_is_accepted_and_reported():
+    browser = FakeBrowser()
+    browser.element(11)
+    real_click = browser.click_at
+
+    def click_and_open_dialog(x, y):
+        real_click(x, y)
+        browser.dialog = {"type": "confirm", "message": "Delete this review?"}
+
+    browser.click_at = click_and_open_dialog
+
+    outcome = executor(browser).execute("click", {"ref": 11})
+
+    assert outcome.summary == "Clicked [11]. Dialog accepted: confirm: Delete this review?"
+    assert ("Page.handleJavaScriptDialog", {"accept": True}) in browser.cdp_calls
 
 
 def test_action_errors_come_back_as_outcomes():
     outcome = executor().execute("click", {"ref": 999})
 
     assert not outcome.ok
-    assert "ref 999 is not on the current page" in outcome.content
+    assert "ref 999 is not on the current page" in outcome.summary
+
+
+def test_long_results_are_cut_and_say_so():
+    browser = FakeBrowser()
+    browser.element(6, tag="select")
+    browser.options[6] = [f"Option number {n}" for n in range(60)]
+
+    outcome = executor(browser).execute("type", {"ref": 6, "text": "nothing", "submit": False})
+
+    assert not outcome.ok
+    assert len(outcome.summary) < MAX_SUMMARY_CHARS + 60
+    assert outcome.summary.endswith("more characters]")
+
+
+def test_view_reads_the_page():
+    browser = FakeBrowser(load_fixture("ax_login.json"))
+
+    page = executor(browser).view()
+
+    assert page.text.startswith("URL: http://site.test/admin/\nTitle: Admin")
+    assert 'textbox "Username *"' in page.text
+    assert page.url == "http://site.test/admin/"
+    assert page.title == "Admin"
+    assert len(page.fingerprint) == 16
+
+
+def test_the_renderer_is_a_plug_point_and_gets_the_previous_page():
+    seen = []
+
+    def render(observation, previous):
+        seen.append(previous)
+        return f"<{observation.title}>"
+
+    tools = executor(render=render)
+
+    assert tools.view().text == "<Admin>"
+    tools.view()
+    assert seen[0] is None
+    assert seen[1].title == "Admin"
+
+
+def test_read_page_without_a_section_waits_and_reads_again():
+    browser = FakeBrowser()
+
+    outcome = executor(browser).execute("read_page", {"section": None})
+
+    assert outcome.ok
+    assert not outcome.acted
+    assert outcome.summary == "Read the page again."
+    assert browser.settled == 1
+
+
+def test_read_page_section_returns_the_detail_separately():
+    def render_section(observation, ref):
+        return "row A\nrow B" if ref == 7 else None
+
+    tools = executor(render_section=render_section)
+
+    found = tools.execute("read_page", {"section": 7})
+    missing = tools.execute("read_page", {"section": 8})
+
+    assert found.detail == "row A\nrow B"
+    assert found.summary == "Showed element [7] in full (11 characters)."
+    assert not missing.ok
+    assert "ref 8 is not on the current page" in missing.summary
+
+
+def test_write_note_returns_the_note():
+    outcome = executor().execute("write_note", {"text": "total: 30.50"})
+
+    assert outcome.ok
+    assert outcome.note == "total: 30.50"
+    assert outcome.summary == "Note saved."
 
 
 def test_recover_returns_to_a_page():
@@ -159,14 +260,8 @@ def test_recover_returns_to_a_page():
     outcome = executor(browser).recover("http://site.test/admin/sales/")
 
     assert outcome.ok
-    assert "Returned to the last page that worked" in outcome.content
+    assert "Returned to the last page that worked" in outcome.summary
     assert browser.url == "http://site.test/admin/sales/"
-
-
-def test_observation_renderer_is_a_plug_point():
-    outcome = executor(render_observation=lambda obs: f"<{obs.title}>").execute("read_page", {})
-
-    assert outcome.content == "<Admin>"
 
 
 def test_schemas_are_json_serialisable():

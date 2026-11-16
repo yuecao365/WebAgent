@@ -146,6 +146,10 @@ class Reply:
 class ModelError(RuntimeError):
     """The call failed and retrying will not help."""
 
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class TransientModelError(ModelError):
     """The call failed in a way worth retrying: rate limit, timeout, server error."""
@@ -249,6 +253,20 @@ class SpendLedger:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class CallOptions:
+    """Per-call settings a provider maps to its own request fields."""
+
+    max_output_tokens: int | None = None
+    # A stable name for the conversation, so a provider can route its steps to the
+    # same prompt cache.
+    cache_key: str | None = None
+    # Let the model send several tool calls in one reply.
+    parallel_tools: bool = False
+    # Reasoning effort, for models that have such a setting.
+    effort: str | None = None
+
+
 class Provider(Protocol):
     """One request to one model API. Raises ModelError or TransientModelError."""
 
@@ -257,7 +275,7 @@ class Provider(Protocol):
         system: str,
         messages: Sequence[Message],
         tools: Sequence[ToolSpec],
-        max_output_tokens: int | None,
+        options: CallOptions,
     ) -> Reply: ...
 
 
@@ -271,12 +289,18 @@ def parse_arguments(raw: str) -> dict[str, Any] | None:
 
 
 class OpenAIProvider:
-    """Chat Completions on OpenAI or any endpoint that speaks the same protocol."""
+    """Chat Completions on OpenAI or any endpoint that speaks the same protocol.
+
+    The messages are sent in the order the loop builds them and nothing is added in
+    front, so the prefix of a request is byte-identical to the previous request's.
+    That is all an automatic prompt cache needs.
+    """
 
     def __init__(self, client: Any, model: str, minimal: bool = False) -> None:
         self._client = client
         self._model = model
-        # Some compatible endpoints reject the newer request fields.
+        # Some compatible endpoints reject the newer request fields. Minimal mode
+        # leaves them out; it is switched on after the first such rejection.
         self._minimal = minimal
 
     def complete(
@@ -284,30 +308,20 @@ class OpenAIProvider:
         system: str,
         messages: Sequence[Message],
         tools: Sequence[ToolSpec],
-        max_output_tokens: int | None,
+        options: CallOptions,
     ) -> Reply:
-        import openai
-
-        request: dict[str, Any] = {
-            "model": self._model,
-            "messages": [{"role": "system", "content": system}, *map(self._encode, messages)],
-            "tools": [self._tool(spec) for spec in tools],
-        }
-        if not self._minimal:
-            request["parallel_tool_calls"] = False
-        if max_output_tokens is not None:
-            key = "max_tokens" if self._minimal else "max_completion_tokens"
-            request[key] = max_output_tokens
         try:
-            response = self._client.chat.completions.create(**request)
-        except openai.RateLimitError as exc:
-            raise TransientModelError(f"rate limited: {exc}") from exc
-        except openai.APIConnectionError as exc:  # includes timeouts
-            raise TransientModelError(f"connection failed: {exc}") from exc
-        except openai.APIStatusError as exc:
-            if exc.status_code >= 500:
-                raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
-            raise ModelError(f"request rejected ({exc.status_code}): {exc}") from exc
+            response = self._send(self._request(system, messages, tools, options))
+        except ModelError as exc:
+            rejected = exc.status_code in (400, 422) and not self._minimal
+            if isinstance(exc, TransientModelError) or not rejected:
+                raise
+            # Possibly a field this endpoint does not know. Try once without the
+            # optional fields and stay in that mode if it works.
+            response = self._send(
+                self._request(system, messages, tools, options, minimal=True), first_error=exc
+            )
+            self._minimal = True
 
         choice = response.choices[0]
         calls = tuple(
@@ -326,13 +340,57 @@ class OpenAIProvider:
             stop_reason=choice.finish_reason or "",
         )
 
-    def _tool(self, spec: ToolSpec) -> dict[str, Any]:
+    def _request(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+        minimal: bool | None = None,
+    ) -> dict[str, Any]:
+        minimal = self._minimal if minimal is None else minimal
+        request: dict[str, Any] = {
+            "model": self._model,
+            "messages": [{"role": "system", "content": system}, *map(self._encode, messages)],
+            "tools": [self._tool(spec, strict=not minimal) for spec in tools],
+        }
+        if options.max_output_tokens is not None:
+            key = "max_tokens" if minimal else "max_completion_tokens"
+            request[key] = options.max_output_tokens
+        if not minimal:
+            request["parallel_tool_calls"] = options.parallel_tools
+            if options.cache_key:
+                request["prompt_cache_key"] = options.cache_key
+            if options.effort:
+                request["reasoning_effort"] = options.effort
+        return request
+
+    def _send(self, request: dict[str, Any], first_error: ModelError | None = None) -> Any:
+        import openai
+
+        try:
+            return self._client.chat.completions.create(**request)
+        except openai.RateLimitError as exc:
+            raise TransientModelError(f"rate limited: {exc}") from exc
+        except openai.APIConnectionError as exc:  # includes timeouts
+            raise TransientModelError(f"connection failed: {exc}") from exc
+        except openai.APIStatusError as exc:
+            if exc.status_code >= 500:
+                raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
+            # When the plain retry fails too, the first rejection is the real cause.
+            cause = first_error or ModelError(
+                f"request rejected ({exc.status_code}): {exc}", status_code=exc.status_code
+            )
+            raise cause from exc
+
+    @staticmethod
+    def _tool(spec: ToolSpec, strict: bool) -> dict[str, Any]:
         function: dict[str, Any] = {
             "name": spec.name,
             "description": spec.description,
             "parameters": spec.parameters,
         }
-        if not self._minimal:
+        if strict:
             function["strict"] = True
         return {"type": "function", "function": function}
 
@@ -376,52 +434,39 @@ class OpenAIProvider:
         )
 
 
-class AnthropicProvider:
-    """The Anthropic Messages API."""
+_CACHE_BREAKPOINT = {"type": "ephemeral"}
 
-    def __init__(self, client: Any, model: str, prompt_caching: bool = False) -> None:
+
+class AnthropicProvider:
+    """The Anthropic Messages API.
+
+    Three cache breakpoints follow the prompt layout: after the system prompt (which
+    also covers the tool schemas), after the task, and after the last history entry.
+    The last message is the tail that changes every step and is never cached.
+    """
+
+    def __init__(self, client: Any, model: str) -> None:
         self._client = client
         self._model = model
-        self._prompt_caching = prompt_caching
+        # Set after the model rejects the effort setting, so it is not sent again.
+        self._no_effort = False
 
     def complete(
         self,
         system: str,
         messages: Sequence[Message],
         tools: Sequence[ToolSpec],
-        max_output_tokens: int | None,
+        options: CallOptions,
     ) -> Reply:
-        import anthropic
-
-        request: dict[str, Any] = {
-            "model": self._model,
-            "max_tokens": max_output_tokens or 16_000,
-            "system": system,
-            "messages": self._encode(messages),
-            "tools": [
-                {
-                    "name": spec.name,
-                    "description": spec.description,
-                    "input_schema": spec.parameters,
-                    "strict": True,
-                }
-                for spec in tools
-            ],
-            # One action per step: a second call would act on a page the first changed.
-            "tool_choice": {"type": "auto", "disable_parallel_tool_use": True},
-        }
-        if self._prompt_caching:
-            request["cache_control"] = {"type": "ephemeral"}
         try:
-            response = self._client.messages.create(**request)
-        except anthropic.RateLimitError as exc:
-            raise TransientModelError(f"rate limited: {exc}") from exc
-        except anthropic.APIConnectionError as exc:  # includes timeouts
-            raise TransientModelError(f"connection failed: {exc}") from exc
-        except anthropic.APIStatusError as exc:
-            if exc.status_code >= 500:
-                raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
-            raise ModelError(f"request rejected ({exc.status_code}): {exc}") from exc
+            response = self._send(self._request(system, messages, tools, options))
+        except ModelError as exc:
+            retry = exc.status_code == 400 and options.effort and not self._no_effort
+            if isinstance(exc, TransientModelError) or not retry:
+                raise
+            # Older models have no effort setting; try once without it.
+            self._no_effort = True
+            response = self._send(self._request(system, messages, tools, options), first_error=exc)
 
         text = "".join(block.text for block in response.content if block.type == "text")
         calls = tuple(
@@ -448,12 +493,60 @@ class AnthropicProvider:
             native=response.content,
         )
 
-    @staticmethod
-    def _encode(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    def _request(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+    ) -> dict[str, Any]:
+        request: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": options.max_output_tokens or 16_000,
+            "system": [{"type": "text", "text": system, "cache_control": _CACHE_BREAKPOINT}],
+            "messages": self._encode(messages),
+            "tools": [
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "input_schema": spec.parameters,
+                    "strict": True,
+                }
+                for spec in tools
+            ],
+            "tool_choice": {
+                "type": "auto",
+                "disable_parallel_tool_use": not options.parallel_tools,
+            },
+        }
+        if options.effort and not self._no_effort:
+            request["output_config"] = {"effort": options.effort}
+        return request
+
+    def _send(self, request: dict[str, Any], first_error: ModelError | None = None) -> Any:
+        import anthropic
+
+        try:
+            return self._client.messages.create(**request)
+        except anthropic.RateLimitError as exc:
+            raise TransientModelError(f"rate limited: {exc}") from exc
+        except anthropic.APIConnectionError as exc:  # includes timeouts
+            raise TransientModelError(f"connection failed: {exc}") from exc
+        except anthropic.APIStatusError as exc:
+            if exc.status_code >= 500:
+                raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
+            cause = first_error or ModelError(
+                f"request rejected ({exc.status_code}): {exc}", status_code=exc.status_code
+            )
+            raise cause from exc
+
+    @classmethod
+    def _encode(cls, messages: Sequence[Message]) -> list[dict[str, Any]]:
         encoded: list[dict[str, Any]] = []
         for message in messages:
             if isinstance(message, UserMessage):
-                encoded.append({"role": "user", "content": message.content})
+                blocks = [{"type": "text", "text": part.text} for part in message.parts]
+                encoded.append({"role": "user", "content": blocks})
             elif isinstance(message, AssistantMessage):
                 content = message.native
                 if content is None:
@@ -483,12 +576,29 @@ class AnthropicProvider:
                 if (
                     previous is not None
                     and previous["role"] == "user"
-                    and isinstance(previous["content"], list)
+                    and previous["content"]
+                    and previous["content"][-1].get("type") == "tool_result"
                 ):
                     previous["content"].append(block)
                 else:
                     encoded.append({"role": "user", "content": [block]})
+        cls._mark_cache_breakpoints(encoded)
         return encoded
+
+    @staticmethod
+    def _mark_cache_breakpoints(encoded: list[dict[str, Any]]) -> None:
+        """Mark the end of the task and the end of the history as cacheable.
+
+        The last message is the tail and stays unmarked. A model turn replayed in the
+        provider's own form cannot carry a mark, so a history that ends with one is
+        cached up to its last tool result instead.
+        """
+        if len(encoded) < 2:
+            return
+        for message in (encoded[0], encoded[-2]):
+            blocks = message["content"]
+            if message["role"] == "user" and isinstance(blocks[-1], dict):
+                blocks[-1]["cache_control"] = _CACHE_BREAKPOINT
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +664,7 @@ class LLMConfig:
         )
 
 
-def build_provider(config: LLMConfig, prompt_caching: bool = False) -> Provider:
+def build_provider(config: LLMConfig) -> Provider:
     """The official SDK client for the configured provider.
 
     SDK retries are turned off: LLMClient retries, so that retry behaviour is the
@@ -566,7 +676,7 @@ def build_provider(config: LLMConfig, prompt_caching: bool = False) -> Provider:
         client = anthropic.Anthropic(
             api_key=config.api_key, base_url=config.base_url, max_retries=0, timeout=300.0
         )
-        return AnthropicProvider(client, config.model, prompt_caching=prompt_caching)
+        return AnthropicProvider(client, config.model)
     import openai
 
     client = openai.OpenAI(
@@ -668,12 +778,16 @@ class LLMClient:
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
         labels: dict[str, Any] | None = None,
+        parallel_tools: bool = False,
+        effort: str | None = None,
     ) -> None:
         self._provider = provider
         self.pricing = pricing
         self.ledger = ledger
         self.model = model
         self._max_output_tokens = max_output_tokens
+        self._parallel_tools = parallel_tools
+        self._effort = effort
         self._max_retries = max_retries
         self._sleep = sleep
         self._clock = clock
@@ -684,6 +798,11 @@ class LLMClient:
         clone = copy.copy(self)
         clone._labels = {**self._labels, **labels}
         return clone
+
+    def _cache_key(self) -> str | None:
+        """One key per task: its steps share a prefix, other tasks do not."""
+        task = self._labels.get("task_id")
+        return None if task is None else f"browser-agent-{self._labels.get('run', 'run')}-{task}"
 
     def complete(
         self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
@@ -696,13 +815,19 @@ class LLMClient:
             )
         )
         self.ledger.check(reserve)
+        options = CallOptions(
+            max_output_tokens=self._max_output_tokens,
+            cache_key=self._cache_key(),
+            parallel_tools=self._parallel_tools,
+            effort=self._effort,
+        )
 
         started = self._clock()
         attempt = 0
         while True:
             attempt += 1
             try:
-                reply = self._provider.complete(system, messages, tools, self._max_output_tokens)
+                reply = self._provider.complete(system, messages, tools, options)
                 break
             except TransientModelError:
                 if attempt > self._max_retries:
@@ -731,22 +856,24 @@ class LLMClient:
         )
 
 
-def client_from_env(results_dir: Path, prompt_caching: bool = False) -> LLMClient:
+def client_from_env(results_dir: Path, parallel_tools: bool = False) -> LLMClient:
     """Build the client for a paid run from .env settings."""
     config = LLMConfig.from_env()
     ledger = SpendLedger(results_dir, config.budget_usd)
     return LLMClient(
-        provider=build_provider(config, prompt_caching=prompt_caching),
+        provider=build_provider(config),
         pricing=config.pricing,
         ledger=ledger,
         model=config.model,
         max_output_tokens=config.max_output_tokens,
+        parallel_tools=parallel_tools,
     )
 
 
 __all__ = [
     "AssistantMessage",
     "BudgetExceededError",
+    "CallOptions",
     "Completion",
     "LLMClient",
     "LLMConfig",

@@ -10,7 +10,7 @@ from browser_agent.harness.events import EventLog, read_events, replay
 from browser_agent.harness.llm import Usage
 from browser_agent.harness.loop import AgentLoop, LoopConfig
 
-from fakes import FINISH_OK, FakeExecutor, call, failed, make_client, reply
+from fakes import FINISH_OK, FakeExecutor, call, failed, make_client, navigated, reply
 
 
 def test_events_are_appended_one_line_each(tmp_path):
@@ -47,8 +47,7 @@ def test_replay_rebuilds_the_steps_of_a_run(tmp_path):
             reply(call("finish", **FINISH_OK), usage=usage),
         ],
     )
-    executor = FakeExecutor()
-    executor.outcomes = [executor._fresh("goto"), failed("click failed: ref 12 is gone")]
+    executor = FakeExecutor([navigated("Opened http://site.test/orders."), failed("click failed")])
     path = tmp_path / "events.jsonl"
     result = AgentLoop(client, executor, EventLog(path), LoopConfig()).run("Count the orders")
 
@@ -63,12 +62,27 @@ def test_replay_rebuilds_the_steps_of_a_run(tmp_path):
     ]
     assert rebuilt.steps[0].text == "Opening orders."
     assert rebuilt.steps[0].tools[0].ok is True
+    assert rebuilt.steps[0].tools[0].content == "Opened http://site.test/orders."
     assert rebuilt.steps[1].tools[0].ok is False
-    assert rebuilt.steps[1].tools[0].content == "click failed: ref 12 is gone"
+    assert rebuilt.steps[1].tools[0].content == "click failed"
     assert rebuilt.total_tokens == result.usage.total_tokens == 3 * 1040
     assert rebuilt.cost_usd == pytest.approx(result.cost_usd)
     assert rebuilt.finish_reason == "finished"
     assert rebuilt.response == result.finish.response()
+
+
+def test_replay_keeps_the_page_each_step_was_shown(tmp_path):
+    client, _, _, _ = make_client(
+        tmp_path, [reply(call("click", ref=1)), reply(call("finish", **FINISH_OK))]
+    )
+    log = EventLog()
+    AgentLoop(client, FakeExecutor(), log, LoopConfig()).run("goal")
+
+    rebuilt = replay(log.events)
+
+    # The history sent to the model has no pages; the log still has every one.
+    assert [step.page for step in rebuilt.steps] == ["page p1", "page p2"]
+    assert [step.url for step in rebuilt.steps] == ["http://site.test/p1", "http://site.test/p2"]
 
 
 def test_replay_keeps_forced_steps_and_notes(tmp_path):
