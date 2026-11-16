@@ -81,6 +81,7 @@ def test_every_call_is_logged_with_its_cost(tmp_path):
         "cached_input_tokens": 1000,
         "cache_write_tokens": 0,
         "output_tokens": 200,
+        "reasoning_tokens": 0,
     }
     assert entry["cost_usd"] == pytest.approx(expected)
     assert ledger.total_usd == pytest.approx(expected)

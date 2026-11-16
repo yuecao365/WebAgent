@@ -457,3 +457,25 @@
     索引要一起处理；以后如果 reset 仍是瓶颈可以再评估）。
   - 把“意外写入”的任务直接判失败（评测只由官方评测器决定，这里只管下一个任务前要不要
     reset）。
+
+## 2026-11-16 OpenAI Responses API 适配器
+
+- **决定**：`harness/llm.py` 里在 Chat Completions 旁边加了 `OpenAIResponsesProvider`。用
+  哪个由配置决定：运行配置的 `api`（`chat` / `responses`）和 `reasoning_effort`，没写就用
+  `.env` 的 `LLM_API`（默认 `chat`）和 `LLM_REASONING_EFFORT`（默认 `low`）。
+- **原因**：gpt-6-luna 在 Chat Completions 上带工具时只能无推理；Responses API 没有这个
+  限制，可以用 low。
+- **无状态调用**：`store=False`，并要求返回加密的推理内容
+  （`include=["reasoning.encrypted_content"]`）。模型每一轮的输出项（推理项、函数调用）按
+  原样追加回 `input`，所以输入仍然只在末尾增长，前缀逐字节稳定；`prompt_cache_key` 照常
+  设置。实测过：带着上一轮的加密推理项再请求，接口接受。
+- **记账不变**：输入分成未缓存、缓存读、缓存写；输出里另外记 `reasoning_tokens`（它是输出
+  token 的一部分，按输出价计费，不重复加）；分区估算、`spend.jsonl`、汇总都照旧，汇总里多
+  一项“其中推理”。Chat Completions 也同样填 `reasoning_tokens`。
+- **被拒绝时**：模型不接受推理设置（400/422）就去掉它重试一次并记住。
+- **测试用真实录制的响应**：`tests/fixtures/responses_api.json`（low，两次连续调用）和
+  `responses_api_reasoning.json`（high，模型确实做了推理，带推理项的回放）。录制花了约
+  0.0005 美元；id 和加密推理内容换成了占位符。其中一个测试检查：按录制的对话重建出的
+  第二次请求，和当时被真实接口接受的请求完全相同。
+- **放弃**：`previous_response_id` 的服务端状态（要 `store=True`，对话存在服务端，且缓存
+  前缀不再由我们控制）；把两个 OpenAI 接口合成一个类（请求和响应的形状差别太大）。

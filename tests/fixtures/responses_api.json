@@ -1,0 +1,285 @@
+[
+ {
+  "request": {
+   "model": "gpt-6-luna",
+   "instructions": "<system prompt>",
+   "input": [
+    {
+     "role": "user",
+     "content": "Task: Get the grand total of order 000000299."
+    },
+    {
+     "role": "user",
+     "content": "Current page:\nURL: http://localhost:7780/admin/sales/order/\nTitle: Orders\n\nheading \"Orders\"\n[12] textbox \"Search by keyword\"\n[13] button \"Search\"\ntable\n [20] row: [21] ID | [22] Status\n [30] row: 000000299 | Pending | [31] link \"View\"\n [40] row: 000000065 | Complete | [41] link \"View\"\n\nWorking note:\n(empty)\n\nStep 1 of 30."
+    }
+   ],
+   "tools": [
+    "click",
+    "type",
+    "goto",
+    "scroll",
+    "read_page",
+    "write_note",
+    "finish"
+   ],
+   "parallel_tool_calls": false,
+   "store": false,
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "max_output_tokens": 4096,
+   "prompt_cache_key": "browser-agent-fixture_capture-responses",
+   "reasoning": {
+    "effort": "low"
+   }
+  },
+  "response": {
+   "id": "resp_001",
+   "access_programs": null,
+   "created_at": 1794841741.0,
+   "error": null,
+   "incomplete_details": null,
+   "model": "gpt-6-luna",
+   "object": "response",
+   "output": [
+    {
+     "arguments": "{\"ref\":31}",
+     "call_id": "call_001",
+     "name": "click",
+     "type": "function_call",
+     "id": "fc_001",
+     "async_": null,
+     "caller": null,
+     "namespace": null,
+     "status": "completed"
+    }
+   ],
+   "parallel_tool_calls": false,
+   "temperature": 1.0,
+   "tool_choice": "auto",
+   "top_p": 0.98,
+   "background": false,
+   "completed_at": 1794841742.0,
+   "conversation": null,
+   "image": {
+    "context_compression": "disabled"
+   },
+   "input_transformations": [],
+   "max_output_tokens": 4096,
+   "max_tool_calls": null,
+   "moderation": null,
+   "previous_response_id": null,
+   "prompt": null,
+   "prompt_cache_diagnostics": null,
+   "prompt_cache_key": "browser-agent-fixture_capture-responses",
+   "prompt_cache_options": null,
+   "prompt_cache_retention": "24h",
+   "reasoning": {
+    "context": "all_turns",
+    "effort": "low",
+    "generate_summary": null,
+    "mode": "standard",
+    "summary": null
+   },
+   "service_tier": "default",
+   "status": "completed",
+   "text": {
+    "format": {
+     "type": "text"
+    },
+    "verbosity": "medium"
+   },
+   "tool_usage": {
+    "image_gen": {
+     "input_tokens": 0,
+     "input_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 0
+     },
+     "output_tokens": 0,
+     "total_tokens": 0,
+     "cached_tokens": null,
+     "cached_tokens_details": null,
+     "output_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 0
+     }
+    },
+    "web_search": {
+     "num_requests": 0
+    }
+   },
+   "top_logprobs": 0,
+   "truncation": "disabled",
+   "usage": {
+    "input_tokens": 1305,
+    "input_tokens_details": {
+     "cache_write_tokens": 1302,
+     "cached_tokens": 0,
+     "cache_write_tokens_details": {
+      "ttl_12h_tokens": 0,
+      "ttl_30m_tokens": 1302
+     }
+    },
+    "output_tokens": 17,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 1322
+   },
+   "billing": {
+    "payer": "developer"
+   },
+   "frequency_penalty": 0.0,
+   "presence_penalty": 0.0,
+   "store": false
+  }
+ },
+ {
+  "request": {
+   "model": "gpt-6-luna",
+   "instructions": "<system prompt>",
+   "input": [
+    {
+     "role": "user",
+     "content": "Task: Get the grand total of order 000000299."
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_001",
+     "name": "click",
+     "arguments": "{\"ref\":31}"
+    },
+    {
+     "type": "function_call_output",
+     "call_id": "call_001",
+     "output": "Clicked [31]. Now on: #000000299"
+    },
+    {
+     "role": "user",
+     "content": "Current page:\nURL: http://localhost:7780/admin/sales/order/view/order_id/299/\nTitle: #000000299\n\nheading \"#000000299\"\nOrder Status Pending\nGrand Total $219.40\n[55] button \"Cancel\"\n\nWorking note:\n(empty)\n\nStep 2 of 30."
+    }
+   ],
+   "tools": [
+    "click",
+    "type",
+    "goto",
+    "scroll",
+    "read_page",
+    "write_note",
+    "finish"
+   ],
+   "parallel_tool_calls": false,
+   "store": false,
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "max_output_tokens": 4096,
+   "prompt_cache_key": "browser-agent-fixture_capture-responses",
+   "reasoning": {
+    "effort": "low"
+   }
+  },
+  "response": {
+   "id": "resp_002",
+   "access_programs": null,
+   "created_at": 1794841743.0,
+   "error": null,
+   "incomplete_details": null,
+   "model": "gpt-6-luna",
+   "object": "response",
+   "output": [
+    {
+     "arguments": "{\"task_type\":\"RETRIEVE\",\"status\":\"SUCCESS\",\"retrieved_data\":\"[219.40]\",\"error_details\":null}",
+     "call_id": "call_002",
+     "name": "finish",
+     "type": "function_call",
+     "id": "fc_002",
+     "async_": null,
+     "caller": null,
+     "namespace": null,
+     "status": "completed"
+    }
+   ],
+   "parallel_tool_calls": false,
+   "temperature": 1.0,
+   "tool_choice": "auto",
+   "top_p": 0.98,
+   "background": false,
+   "completed_at": 1794841744.0,
+   "conversation": null,
+   "image": {
+    "context_compression": "disabled"
+   },
+   "input_transformations": [],
+   "max_output_tokens": 4096,
+   "max_tool_calls": null,
+   "moderation": null,
+   "previous_response_id": null,
+   "prompt": null,
+   "prompt_cache_diagnostics": null,
+   "prompt_cache_key": "browser-agent-fixture_capture-responses",
+   "prompt_cache_options": null,
+   "prompt_cache_retention": "24h",
+   "reasoning": {
+    "context": "all_turns",
+    "effort": "low",
+    "generate_summary": null,
+    "mode": "standard",
+    "summary": null
+   },
+   "service_tier": "default",
+   "status": "completed",
+   "text": {
+    "format": {
+     "type": "text"
+    },
+    "verbosity": "medium"
+   },
+   "tool_usage": {
+    "image_gen": {
+     "input_tokens": 0,
+     "input_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 0
+     },
+     "output_tokens": 0,
+     "total_tokens": 0,
+     "cached_tokens": null,
+     "cached_tokens_details": null,
+     "output_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 0
+     }
+    },
+    "web_search": {
+     "num_requests": 0
+    }
+   },
+   "top_logprobs": 0,
+   "truncation": "disabled",
+   "usage": {
+    "input_tokens": 1300,
+    "input_tokens_details": {
+     "cache_write_tokens": 123,
+     "cached_tokens": 1174,
+     "cache_write_tokens_details": {
+      "ttl_12h_tokens": 0,
+      "ttl_30m_tokens": 123
+     }
+    },
+    "output_tokens": 39,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 1339
+   },
+   "billing": {
+    "payer": "developer"
+   },
+   "frequency_penalty": 0.0,
+   "presence_penalty": 0.0,
+   "store": false
+  }
+ }
+]

@@ -85,6 +85,10 @@ class RunConfig(BaseModel):
     # when_dirty resets only if an earlier task may have changed the site.
     reset: Literal["when_dirty", "always", "never"] = "when_dirty"
     headless: bool = True
+    # OpenAI API ("chat" or "responses") and reasoning effort for this run; empty
+    # leaves LLM_API and LLM_REASONING_EFFORT from .env in charge.
+    api: Literal["chat", "responses"] | None = None
+    reasoning_effort: str | None = None
     budgets: BudgetSettings = Field(default_factory=BudgetSettings)
     switches: Switches = Field(default_factory=Switches)
 
@@ -168,7 +172,15 @@ def new_run_dir(results: Path, name: str, today: str | None = None) -> Path:
     return candidate
 
 
-USAGE_KEYS = ("input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens")
+# The first three are the prompt; reasoning_tokens is the part of the output spent
+# on reasoning.
+USAGE_KEYS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+)
 
 
 def cache_hit_rate(usage: dict[str, int]) -> float:
@@ -232,7 +244,8 @@ def summary_markdown(
         "",
         f"Input: {usage['input_tokens']} uncached, {usage['cached_input_tokens']} read from "
         f"cache, {usage['cache_write_tokens']} written to cache. "
-        f"Output: {usage['output_tokens']}. Cache hit rate: {summary['cache_hit_rate']:.0%}.",
+        f"Output: {usage['output_tokens']}, of which reasoning {usage['reasoning_tokens']}. "
+        f"Cache hit rate: {summary['cache_hit_rate']:.0%}.",
         "",
         "| Prompt section | Mean tokens per task (estimate) | Share |",
         "|---|---:|---:|",
@@ -390,6 +403,8 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
         results,
         parallel_tools=config.switches.multi_action,
         response_cache=results / "response_cache" if dev_cache else None,
+        api=config.api,
+        effort=config.reasoning_effort,
     )
     env = ShoppingAdmin(SiteConfig.from_env())
     data_dir = Path(os.environ.get("BROWSER_AGENT_DATA_DIR", "").strip() or root / "data")

@@ -53,11 +53,13 @@ def overview(runs: list[dict[str, Any]]) -> str:
         row("  input, read from cache", lambda r: f"{usage(r, 'cached_input_tokens'):,.0f}"),
         row("  input, written to cache", lambda r: f"{usage(r, 'cache_write_tokens'):,.0f}"),
         row("  output", lambda r: f"{usage(r, 'output_tokens'):,.0f}"),
+        row("  of which reasoning", lambda r: f"{usage(r, 'reasoning_tokens'):,.0f}"),
         row("Cache hit rate", lambda r: f"{r['summary'].get('cache_hit_rate', 0):.0%}"),
         row("USD per task", lambda r: f"{r['summary']['mean_usd']:.4f}"),
         row("Seconds per task", lambda r: f"{r['summary']['mean_seconds']:.0f}"),
         row("Steps per task", lambda r: f"{r['summary']['mean_steps']:.1f}"),
         row("Total USD", lambda r: f"{r['summary']['total_usd']:.4f}"),
+        row("Resets", lambda r: str(r["summary"].get("resets", "-"))),
     ]
     return table(["", *[run["name"] for run in runs]], rows)
 

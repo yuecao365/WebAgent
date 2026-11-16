@@ -62,6 +62,27 @@ def test_switches_select_the_observation_components():
     assert not config.switches.multi_action
 
 
+def test_a_config_can_pick_the_api_and_the_reasoning_effort(tmp_path, monkeypatch):
+    write_subset(tmp_path, count=1)
+    asked = {}
+
+    def fake_client(results_dir, **kwargs):
+        asked.update(kwargs)
+        raise SystemExit("stop before any call")
+
+    monkeypatch.setattr(runner, "client_from_env", fake_client)
+    config = RunConfig(name="x", api="responses", reasoning_effort="low")
+
+    with pytest.raises(SystemExit, match="stop before any call"):
+        runner.run(config, tmp_path)
+
+    assert (asked["api"], asked["effort"]) == ("responses", "low")
+    with pytest.raises(ValidationError):
+        RunConfig(name="x", api="assistants")
+    # Left empty, .env decides.
+    assert (RunConfig(name="x").api, RunConfig(name="x").reasoning_effort) == (None, None)
+
+
 def test_checked_in_configs_are_valid():
     for path in sorted((runner.Path(__file__).resolve().parents[1] / "configs").glob("*.json")):
         if path.name != "subset.json":
@@ -210,6 +231,7 @@ def test_summary_reports_the_token_split_cache_rate_and_sections():
         "cached_input_tokens": 800,
         "cache_write_tokens": 200,
         "output_tokens": 40,
+        "reasoning_tokens": 0,
     }
     assert summary["cache_hit_rate"] == pytest.approx(0.4)
     assert summary["mean_section_tokens"] == {"system": 300, "history": 300, "observation": 400}

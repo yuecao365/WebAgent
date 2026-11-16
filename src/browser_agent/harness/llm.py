@@ -14,7 +14,7 @@ import os
 import random
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -106,6 +106,9 @@ class Usage:
     cached_input_tokens: int = 0
     cache_write_tokens: int = 0
     output_tokens: int = 0
+    # The part of output_tokens spent on reasoning. Already counted and priced as
+    # output; kept apart to show what reasoning costs.
+    reasoning_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -122,6 +125,7 @@ class Usage:
             self.cached_input_tokens + other.cached_input_tokens,
             self.cache_write_tokens + other.cache_write_tokens,
             self.output_tokens + other.output_tokens,
+            self.reasoning_tokens + other.reasoning_tokens,
         )
 
 
@@ -289,6 +293,28 @@ def parse_arguments(raw: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _call_openai(
+    create: Callable[..., Any], request: dict[str, Any], first_error: ModelError | None = None
+) -> Any:
+    """Call an OpenAI SDK endpoint and sort its errors into retryable and fatal."""
+    import openai
+
+    try:
+        return create(**request)
+    except openai.RateLimitError as exc:
+        raise TransientModelError(f"rate limited: {exc}") from exc
+    except openai.APIConnectionError as exc:  # includes timeouts
+        raise TransientModelError(f"connection failed: {exc}") from exc
+    except openai.APIStatusError as exc:
+        if exc.status_code >= 500:
+            raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
+        # When a retry in another mode fails too, the first rejection is the real cause.
+        cause = first_error or ModelError(
+            f"request rejected ({exc.status_code}): {exc}", status_code=exc.status_code
+        )
+        raise cause from exc
+
+
 class OpenAIProvider:
     """Chat Completions on OpenAI or any endpoint that speaks the same protocol.
 
@@ -394,22 +420,7 @@ class OpenAIProvider:
         return request
 
     def _send(self, request: dict[str, Any], first_error: ModelError | None = None) -> Any:
-        import openai
-
-        try:
-            return self._client.chat.completions.create(**request)
-        except openai.RateLimitError as exc:
-            raise TransientModelError(f"rate limited: {exc}") from exc
-        except openai.APIConnectionError as exc:  # includes timeouts
-            raise TransientModelError(f"connection failed: {exc}") from exc
-        except openai.APIStatusError as exc:
-            if exc.status_code >= 500:
-                raise TransientModelError(f"server error {exc.status_code}: {exc}") from exc
-            # When the plain retry fails too, the first rejection is the real cause.
-            cause = first_error or ModelError(
-                f"request rejected ({exc.status_code}): {exc}", status_code=exc.status_code
-            )
-            raise cause from exc
+        return _call_openai(self._client.chat.completions.create, request, first_error)
 
     @staticmethod
     def _tool(spec: ToolSpec, strict: bool) -> dict[str, Any]:
@@ -454,11 +465,188 @@ class OpenAIProvider:
         cached = getattr(details, "cached_tokens", None) or 0
         written = getattr(details, "cache_write_tokens", None) or 0
         prompt = usage.prompt_tokens or 0
+        output_details = getattr(usage, "completion_tokens_details", None)
         return Usage(
             input_tokens=max(prompt - cached - written, 0),
             cached_input_tokens=cached,
             cache_write_tokens=written,
             output_tokens=usage.completion_tokens or 0,
+            reasoning_tokens=getattr(output_details, "reasoning_tokens", None) or 0,
+        )
+
+
+class OpenAIResponsesProvider:
+    """The OpenAI Responses API.
+
+    Unlike Chat Completions it lets a reasoning model use function tools at any
+    effort. Requests are stateless (store off): every turn of the model is sent back
+    as the items it came in, reasoning included in its encrypted form, so the input
+    only ever grows at the end and the prompt cache can reuse it.
+    """
+
+    def __init__(self, client: Any, model: str) -> None:
+        self._client = client
+        self._model = model
+        # Set after the model rejects the reasoning setting, so it is not sent again.
+        self._no_effort = False
+
+    def complete(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+    ) -> Reply:
+        try:
+            response = self._send(self._request(system, messages, tools, options))
+        except ModelError as exc:
+            retry = exc.status_code in (400, 422) and options.effort and not self._no_effort
+            if isinstance(exc, TransientModelError) or not retry:
+                raise
+            # A model without a reasoning setting: try once without it.
+            self._no_effort = True
+            response = self._send(self._request(system, messages, tools, options), first_error=exc)
+
+        text_parts: list[str] = []
+        calls: list[ToolCall] = []
+        native: list[dict[str, Any]] = []
+        refused = False
+        for item in response.output:
+            if item.type == "function_call":
+                calls.append(
+                    ToolCall(
+                        id=item.call_id,
+                        name=item.name,
+                        arguments=parse_arguments(item.arguments or ""),
+                        raw_arguments=item.arguments or "",
+                    )
+                )
+                native.append(
+                    {
+                        "type": "function_call",
+                        "call_id": item.call_id,
+                        "name": item.name,
+                        "arguments": item.arguments or "",
+                    }
+                )
+            elif item.type == "reasoning":
+                native.append(
+                    {
+                        "type": "reasoning",
+                        "id": item.id,
+                        "summary": [],
+                        "encrypted_content": item.encrypted_content,
+                    }
+                )
+            elif item.type == "message":
+                for part in item.content:
+                    if part.type == "output_text":
+                        text_parts.append(part.text)
+                    elif part.type == "refusal":
+                        refused = True
+        text = "".join(text_parts)
+        if text:
+            native.append({"role": "assistant", "content": text})
+
+        if refused:
+            stop_reason = "refusal"
+        elif calls:
+            stop_reason = "tool_calls"
+        else:
+            detail = getattr(response, "incomplete_details", None)
+            stop_reason = getattr(detail, "reason", None) or response.status or ""
+        return Reply(
+            text=text,
+            tool_calls=tuple(calls),
+            usage=self._usage(response.usage),
+            stop_reason=stop_reason,
+            native=native,
+        )
+
+    def _request(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        options: CallOptions,
+    ) -> dict[str, Any]:
+        request: dict[str, Any] = {
+            "model": self._model,
+            "instructions": system,
+            "input": self._encode(messages),
+            "tools": [
+                {
+                    "type": "function",
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": spec.parameters,
+                    "strict": True,
+                }
+                for spec in tools
+            ],
+            "parallel_tool_calls": options.parallel_tools,
+            # Nothing is kept on the server; the reasoning comes back encrypted so it
+            # can be replayed with the next request.
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+        }
+        if options.max_output_tokens is not None:
+            request["max_output_tokens"] = options.max_output_tokens
+        if options.cache_key:
+            request["prompt_cache_key"] = options.cache_key
+        if options.effort and not self._no_effort:
+            request["reasoning"] = {"effort": options.effort}
+        return request
+
+    def _send(self, request: dict[str, Any], first_error: ModelError | None = None) -> Any:
+        return _call_openai(self._client.responses.create, request, first_error)
+
+    @staticmethod
+    def _encode(messages: Sequence[Message]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for message in messages:
+            if isinstance(message, UserMessage):
+                items.append({"role": "user", "content": message.content})
+            elif isinstance(message, ToolMessage):
+                items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": message.tool_call_id,
+                        "output": message.content,
+                    }
+                )
+            elif message.native is not None:
+                # The model's own items, reasoning included, exactly as they came.
+                items.extend(message.native)
+            else:
+                if message.text:
+                    items.append({"role": "assistant", "content": message.text})
+                items.extend(
+                    {
+                        "type": "function_call",
+                        "call_id": call.id,
+                        "name": call.name,
+                        "arguments": call.raw_arguments or "{}",
+                    }
+                    for call in message.tool_calls
+                )
+        return items
+
+    @staticmethod
+    def _usage(usage: Any) -> Usage:
+        if usage is None:
+            return Usage()
+        details = getattr(usage, "input_tokens_details", None)
+        cached = getattr(details, "cached_tokens", None) or 0
+        written = getattr(details, "cache_write_tokens", None) or 0
+        prompt = usage.input_tokens or 0
+        reasoning = getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", 0)
+        return Usage(
+            input_tokens=max(prompt - cached - written, 0),
+            cached_input_tokens=cached,
+            cache_write_tokens=written,
+            output_tokens=usage.output_tokens or 0,
+            reasoning_tokens=reasoning or 0,
         )
 
 
@@ -649,6 +837,14 @@ def _env_effort() -> str | None:
     return None if raw == "omit" else raw
 
 
+def _env_api() -> str:
+    """LLM_API: "chat" (default) or "responses"."""
+    api = os.environ.get("LLM_API", "").strip().lower() or "chat"
+    if api not in ("chat", "responses"):
+        raise ModelError(f"LLM_API must be 'chat' or 'responses', not {api!r}")
+    return api
+
+
 def _env_float(name: str) -> float | None:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else None
@@ -667,6 +863,8 @@ class LLMConfig:
     max_output_tokens: int | None = DEFAULT_MAX_OUTPUT_TOKENS
     openai_minimal: bool = False
     effort: str | None = DEFAULT_EFFORT
+    # Which OpenAI API to use: "chat" (Chat Completions) or "responses".
+    api: str = "chat"
 
     @classmethod
     def from_env(cls) -> LLMConfig:
@@ -706,6 +904,7 @@ class LLMConfig:
             max_output_tokens=int(max_output) if max_output else DEFAULT_MAX_OUTPUT_TOKENS,
             openai_minimal=os.environ.get("LLM_OPENAI_MINIMAL", "").strip() == "1",
             effort=_env_effort(),
+            api=_env_api(),
         )
 
 
@@ -727,6 +926,8 @@ def build_provider(config: LLMConfig) -> Provider:
     client = openai.OpenAI(
         api_key=config.api_key, base_url=config.base_url, max_retries=0, timeout=300.0
     )
+    if config.api == "responses":
+        return OpenAIResponsesProvider(client, config.model)
     return OpenAIProvider(client, config.model, minimal=config.openai_minimal)
 
 
@@ -994,10 +1195,22 @@ class LLMClient:
 
 
 def client_from_env(
-    results_dir: Path, parallel_tools: bool = False, response_cache: Path | None = None
+    results_dir: Path,
+    parallel_tools: bool = False,
+    response_cache: Path | None = None,
+    api: str | None = None,
+    effort: str | None = None,
 ) -> LLMClient:
-    """Build the client for a paid run from .env settings."""
+    """Build the client for a paid run from .env settings.
+
+    api and effort, when given, take the place of LLM_API and LLM_REASONING_EFFORT,
+    so that an experiment config can pick them per arm. effort "omit" sends none.
+    """
     config = LLMConfig.from_env()
+    if api is not None:
+        config = replace(config, api=api)
+    if effort is not None:
+        config = replace(config, effort=None if effort == "omit" else effort)
     ledger = SpendLedger(results_dir, config.budget_usd)
     return LLMClient(
         provider=build_provider(config),
