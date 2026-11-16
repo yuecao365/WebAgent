@@ -61,6 +61,25 @@ def test_disabled_elements_are_not_clicked():
     assert browser.clicks == []
 
 
+def test_results_say_which_element_was_acted_on():
+    """The history keeps these lines and no pages, so a bare ref would mean nothing later."""
+    browser = FakeBrowser()
+    browser.element(31, tag="a", label="View", row="000000299 | May 31, 2023 | Pending | View")
+    browser.element(12, tag="input", label="Search by keyword", row="")
+    browser.element(6, tag="select", label="Status", row="")
+    browser.options[6] = ["Pending", "Complete"]
+
+    assert actions.click(browser, 31) == (
+        'Clicked [31] "View" in row "000000299 | May 31, 2023 | Pending | View".'
+    )
+    assert actions.type_text(browser, 12, "hoodie", submit=True) == (
+        "Typed 'hoodie' into [12] \"Search by keyword\" and pressed Enter."
+    )
+    assert actions.type_text(browser, 6, "complete") == (
+        "Chose 'Complete' in select [6] \"Status\"."
+    )
+
+
 def test_type_reports_a_field_that_did_not_take_the_text_as_typed():
     browser = FakeBrowser()
     browser.element(3, tag="input")

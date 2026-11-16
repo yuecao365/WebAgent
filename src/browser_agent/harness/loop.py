@@ -122,6 +122,9 @@ def system_prompt(multi_action: bool, pages_in_history: bool = False) -> str:
 
 
 NUDGE = "Reply with a tool call. Call finish when the task is done or cannot be done."
+# Shown in place of an empty note. Models left the note unused and then went back and
+# forth between pages they could no longer remember.
+EMPTY_NOTE = "(empty: save here with write_note what you will need after leaving this page)"
 EXTRA_CALL = "Not executed: only one tool call runs per step. Send it again if still needed."
 AFTER_FAILURE = "Not executed: an earlier call in this step failed."
 AFTER_NAVIGATION = (
@@ -307,7 +310,7 @@ class AgentLoop:
         tail = [Part("observation", f"Current page:\n{view.text}")]
         if detail is not None:
             tail.append(Part("observation", f"Detail you asked for:\n{detail}"))
-        tail.append(Part("notes", f"Working note:\n{self._note or '(empty)'}"))
+        tail.append(Part("notes", f"Working note:\n{self._note or EMPTY_NOTE}"))
         lines = [f"Step {self._steps} of {self._config.budgets.max_steps}.", *status]
         tail.append(Part("status", "\n".join(lines)))
         if self._config.pages_in_history:

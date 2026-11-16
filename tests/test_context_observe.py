@@ -100,6 +100,66 @@ def test_pruning_puts_a_table_row_on_one_line():
     ]
 
 
+def test_a_cell_without_a_name_shows_the_text_inside_it():
+    """An order line's quantity sits in a small table inside the cell, which has no name."""
+    nodes = [
+        node(1, "table", "", children=[2]),
+        node(2, "row", "", children=[3, 4, 9]),
+        node(3, "cell", "Argus Tank", children=[30]),
+        node(30, "StaticText", "Argus Tank"),
+        node(4, "cell", "", children=[5]),
+        node(5, "table", "", children=[6]),
+        node(6, "row", "", children=[7, 8]),
+        node(7, "rowheader", "Ordered"),
+        node(8, "cell", "1"),
+        node(9, "cell", "$22.00"),
+    ]
+
+    lines = body(PageRenderer(ViewOptions(prune=True)).render(page(nodes), None))
+
+    assert lines == ["table", " [102] row: Argus Tank | Ordered 1 | $22.00"]
+
+
+def test_a_row_with_fields_is_laid_out_as_a_form():
+    """Carrier, title and number of a shipment: fields need their names and options."""
+    nodes = [
+        node(1, "table", "", children=[2, 6]),
+        node(2, "row", "", children=[3, 4, 5]),
+        node(3, "columnheader", "Carrier"),
+        node(4, "columnheader", "Number"),
+        node(5, "columnheader", "Action"),
+        node(6, "row", "", children=[7, 12, 14]),
+        node(7, "cell", "Custom Value", children=[8]),
+        node(8, "combobox", "", children=[9], value={"value": "Custom Value"}),
+        node(9, "MenuListPopup", "", children=[10, 11]),
+        node(10, "option", "Custom Value", properties=[prop("selected")]),
+        node(11, "option", "Federal Express"),
+        node(12, "cell", "", children=[13]),
+        node(13, "textbox", ""),
+        node(14, "cell", "", children=[15]),
+        node(15, "button", "Delete"),
+    ]
+
+    lines = body(PageRenderer(ViewOptions(prune=True)).render(page(nodes), None))
+
+    assert lines == [
+        "table",
+        " [102] row: [103] Carrier | [104] Number | [105] Action",
+        " [106] row:",
+        '  Carrier: [108] combobox value="Custom Value"',
+        '   [110] option "Custom Value" selected',
+        '   [111] option "Federal Express"',
+        "  Number: [113] textbox",
+        '  Action: [115] button "Delete"',
+    ]
+
+
+def test_a_row_of_records_with_only_links_and_checkboxes_stays_on_one_line():
+    lines = body(PageRenderer(ViewOptions(prune=True)).render(page(grid(1)), None))
+
+    assert lines[-1] == ' [110] row: 000000000 | Pending | [1103] link "View"'
+
+
 def test_pruning_keeps_only_refs_that_can_be_acted_on():
     nodes = [
         node(1, "RootWebArea", "Page", children=[2, 3, 5, 6]),

@@ -27,6 +27,14 @@ _DESCRIBE_JS = f"""function() {{
   const type = (el.getAttribute('type') || '').toLowerCase();
   const typable = ['', 'text', 'search', 'email', 'url', 'tel', 'password', 'number',
                    'date', 'datetime-local', 'month', 'time', 'week'];
+  const clean = s => (s || '').replace(/\\s+/g, ' ').trim();
+  const field = ['input', 'textarea', 'select'].includes(tag);
+  const ownLabel = el.labels && el.labels.length ? el.labels[0].innerText : '';
+  // What a person would call the element: a field by its label, the rest by its text.
+  const label = clean(el.getAttribute('aria-label') || ownLabel
+    || (field ? el.getAttribute('placeholder') : el.innerText)
+    || el.getAttribute('title') || (field ? el.getAttribute('name') : '')).slice(0, 60);
+  const tr = el.closest('tr');
   return {{
     tag: tag,
     option: tag === 'option',
@@ -34,8 +42,24 @@ _DESCRIBE_JS = f"""function() {{
     editable: tag === 'textarea' || el.isContentEditable
       || (tag === 'input' && typable.includes(type)),
     disabled: !!el.disabled,
+    label: label,
+    row: tr && tr !== el ? clean(tr.innerText).slice(0, 90) : '',
   }};
 }}"""
+
+
+def _described(info: dict[str, Any]) -> str:
+    """The element in words, for the result line the history keeps.
+
+    The history has no pages, so "Clicked [8123]" alone would not tell the model
+    later which link, or which row of a table, it had already been to.
+    """
+    label, row = info.get("label") or "", info.get("row") or ""
+    text = f" {json.dumps(label, ensure_ascii=False)}" if label else ""
+    if row and row != label:
+        text += f" in row {json.dumps(row, ensure_ascii=False)}"
+    return text
+
 
 _SELECT_OPTION_JS = f"""function() {{
   {_ELEMENT}
@@ -151,16 +175,16 @@ def click(browser: Browser, ref: int) -> str:
         if not _call(browser, ref, _SELECT_OPTION_JS):
             raise ActionError(f"option [{ref}] does not belong to a select")
         browser.settle()
-        return f"Selected option [{ref}]."
+        return f"Selected option [{ref}]{_described(info)}."
     center = _center(browser, ref)
     if center is None:
         # Styled checkboxes and similar controls are often visually hidden inputs.
         _call(browser, ref, _SCRIPT_CLICK_JS)
         browser.settle()
-        return f"Clicked [{ref}] by script because it has no visible box."
+        return f"Clicked [{ref}]{_described(info)} by script because it has no visible box."
     browser.click_at(*center)
     browser.settle()
-    return f"Clicked [{ref}]."
+    return f"Clicked [{ref}]{_described(info)}."
 
 
 def type_text(browser: Browser, ref: int, text: str, submit: bool = False) -> str:
@@ -172,7 +196,7 @@ def type_text(browser: Browser, ref: int, text: str, submit: bool = False) -> st
             options = json.dumps(chosen["options"], ensure_ascii=False)
             raise ActionError(f"select [{ref}] has no option matching {text!r}; options: {options}")
         browser.settle()
-        return f"Chose {chosen['chosen']!r} in select [{ref}]."
+        return f"Chose {chosen['chosen']!r} in select [{ref}]{_described(info)}."
     if not info["editable"]:
         raise ActionError(f"element [{ref}] is a <{info['tag']}>, not a text field or select")
     _call(browser, ref, _SELECT_CONTENT_JS)
@@ -191,7 +215,7 @@ def type_text(browser: Browser, ref: int, text: str, submit: bool = False) -> st
     suffix = " and pressed Enter" if submit else ""
     differs = value is not None and value != text
     note = f" The field reads {value!r}." if differs else ""
-    return f"Typed {text!r} into [{ref}]{suffix}.{note}"
+    return f"Typed {text!r} into [{ref}]{_described(info)}{suffix}.{note}"
 
 
 def scroll(browser: Browser, direction: Literal["up", "down"]) -> str:

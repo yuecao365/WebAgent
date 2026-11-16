@@ -19,6 +19,7 @@ from browser_agent.harness.loop import (
     AFTER_FAILURE,
     AFTER_NAVIGATION,
     BAD_ARGUMENTS,
+    EMPTY_NOTE,
     EXTRA_CALL,
     NUDGE,
     AgentLoop,
@@ -87,7 +88,7 @@ def test_prompt_is_task_then_history_then_tail(tmp_path):
     assert len(first) == 2
     assert tail(provider, 0) == {
         "observation": "Current page:\npage p1",
-        "notes": "Working note:\n(empty)",
+        "notes": f"Working note:\n{EMPTY_NOTE}",
         "status": "Step 1 of 30.",
     }
     # Step 2: the call and its one-line result joined the history; the tail is new.
@@ -362,7 +363,7 @@ def test_the_working_note_is_shown_in_the_tail_until_replaced(tmp_path):
 
     notes = [tail(provider, index)["notes"] for index in range(4)]
     assert notes == [
-        "Working note:\n(empty)",
+        f"Working note:\n{EMPTY_NOTE}",
         "Working note:\norder 12 total: 30.50",
         "Working note:\norder 12 total: 30.50",
         "Working note:\ndone: 12, 13",

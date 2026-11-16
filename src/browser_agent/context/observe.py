@@ -37,6 +37,8 @@ INTERACTIVE_ROLES = frozenset(
         "menuitemcheckbox", "menuitemradio", "tab", "treeitem", "columnheader",
     }
 )  # fmt: skip
+# Controls a user fills in. A table row holding one is a form, not a record.
+_INPUT_ROLES = frozenset({"textbox", "searchbox", "combobox", "listbox", "spinbutton", "slider"})
 # Interactive roles whose children are their own choices, not their label.
 _CHOICE_HOLDERS = frozenset({"combobox", "listbox"})
 # Structure worth one line of its own: it tells the model where it is on the page.
@@ -119,6 +121,8 @@ class _Renderer:
         self._by_ref = {
             node["backendDOMNodeId"]: node for node in nodes if "backendDOMNodeId" in node
         }
+        # Column names of the header row seen last, for labelling form rows.
+        self._headers: list[str] = []
 
     def page(self) -> list[str]:
         return self._lines(self._inner(self._roots, 0, None, False))
@@ -196,7 +200,7 @@ class _Renderer:
         if role == "StaticText":
             return [] if mute_text or not name else [_Block("text", [indent + name])]
         if role == "row":
-            return [_Block("row", [indent + self._row(node)])]
+            return [_Block("row", self._row_lines(node, depth, holder))]
         if _interactive(node):
             line = indent + self._line(node, with_ref=True)
             # The label of a control repeats its name; only its choices are kept.
@@ -222,23 +226,82 @@ class _Renderer:
             parts.append(json.dumps(name, ensure_ascii=False))
         return " ".join(parts + node_states(node, name))
 
-    def _row(self, node: dict[str, Any]) -> str:
-        """A table row on one line: its cells, with what can be acted on inside them."""
-        cells = [self._cell(cell) for cell in self._children(node) if not cell.get("ignored")]
-        while cells and not cells[-1]:
-            cells.pop()
-        return f"{node_ref(node)} row: {' | '.join(cells)}"
+    def _text(self, node: dict[str, Any]) -> str:
+        """What a node says: its name, or else what the text inside it says.
+
+        A cell that holds a small table of its own (a quantity broken down by
+        state, say) has no name; its content is only in its descendants.
+        """
+        name = _name(node)
+        if name:
+            return name
+        parts = []
+        for child in self._children(node):
+            if _role(child) in SKIP_SUBTREE_ROLES:
+                continue
+            if not child.get("ignored") and _interactive(child):
+                continue
+            text = self._text(child)
+            if text:
+                parts.append(text)
+        return " ".join(parts)
+
+    def _row_lines(
+        self, node: dict[str, Any], depth: int, holder: dict[str, Any] | None
+    ) -> list[str]:
+        """A table row: one line, unless it is a form to fill in."""
+        cells = [cell for cell in self._children(node) if not cell.get("ignored")]
+        if cells and all(_role(cell) == "columnheader" for cell in cells):
+            # Remembered to label the cells of form rows further down the table.
+            self._headers = [_name(cell) for cell in cells]
+        controls = [control for cell in cells for control in self._controls(cell)]
+        if any(_role(control) in _INPUT_ROLES for control in controls):
+            return self._form_row(node, cells, depth, holder)
+        texts = [self._cell(cell) for cell in cells]
+        while texts and not texts[-1]:
+            texts.pop()
+        return [f"{' ' * depth}{node_ref(node)} row: {' | '.join(texts)}"]
+
+    def _form_row(
+        self,
+        node: dict[str, Any],
+        cells: list[dict[str, Any]],
+        depth: int,
+        holder: dict[str, Any] | None,
+    ) -> list[str]:
+        """A row with fields to fill in: one line per cell, under its column's name.
+
+        On one line the fields have no names and a dropdown cannot show its options,
+        which is exactly what is needed to fill the row in.
+        """
+        indent = " " * (depth + 1)
+        labels = self._headers if len(self._headers) == len(cells) else [""] * len(cells)
+        lines = [f"{' ' * depth}{node_ref(node)} row:"]
+        for label, cell in zip(labels, cells, strict=True):
+            prefix = f"{label}: " if label else ""
+            controls = self._controls(cell)
+            if not controls:
+                text = self._text(cell)
+                if text:
+                    lines.append(f"{indent}{prefix}{text}")
+                continue
+            for position, control in enumerate(controls):
+                block = self._lines(self._pruned_blocks(control, depth + 1, holder, True))
+                if position == 0 and prefix and block:
+                    block[0] = f"{indent}{prefix}{block[0].strip()}"
+                lines.extend(block)
+        return lines
 
     def _cell(self, cell: dict[str, Any]) -> str:
-        controls = self._controls(cell)
         if _role(cell) == "columnheader":
             # Headers can be clicked to sort; the ref is enough, the role is implied.
             return f"{node_ref(cell)} {_name(cell)}"
         if _interactive(cell):
             return self._line(cell, with_ref=True)
+        controls = self._controls(cell)
+        text = self._text(cell)
         if not controls:
-            return _name(cell)
-        text = _name(cell)
+            return text
         shown = " ".join(self._line(control, with_ref=True) for control in controls)
         # A cell whose only content is its control needs no separate text.
         repeats = len(controls) == 1 and text == _name(controls[0])
