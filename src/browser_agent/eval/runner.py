@@ -93,6 +93,15 @@ def new_run_dir(results: Path, name: str, today: str | None = None) -> Path:
     return candidate
 
 
+USAGE_KEYS = ("input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens")
+
+
+def cache_hit_rate(usage: dict[str, int]) -> float:
+    """Share of the prompt tokens that were read from the provider's cache."""
+    prompt = sum(usage.get(key, 0) for key in USAGE_KEYS[:3])
+    return usage.get("cached_input_tokens", 0) / prompt if prompt else 0.0
+
+
 def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate per-task records; means are over all tasks, failed ones included."""
     count = len(records)
@@ -100,6 +109,10 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     def mean(key: str) -> float:
         return sum(record[key] for record in records) / count if count else 0.0
 
+    usage = {key: sum(r.get("usage", {}).get(key, 0) for r in records) for key in USAGE_KEYS}
+    sections: Counter[str] = Counter()
+    for record in records:
+        sections.update(record.get("sections", {}))
     return {
         "tasks": count,
         "successes": sum(1 for record in records if record["success"]),
@@ -110,6 +123,10 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         "mean_steps": mean("steps"),
         "total_usd": sum(record["usd"] for record in records),
         "total_tokens": sum(record["tokens"] for record in records),
+        "usage": usage,
+        "cache_hit_rate": cache_hit_rate(usage),
+        # Estimated prompt tokens per task, by section of the prompt.
+        "mean_section_tokens": {name: tokens / count for name, tokens in sections.items() if count},
         "finish_reasons": dict(Counter(record["finish_reason"] for record in records)),
     }
 
@@ -117,6 +134,7 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
 def summary_markdown(
     name: str, model: str, summary: dict[str, Any], records: list[dict[str, Any]]
 ) -> str:
+    usage = summary["usage"]
     lines = [
         f"# {name}",
         "",
@@ -133,13 +151,30 @@ def summary_markdown(
         f"Total: ${summary['total_usd']:.4f}, {summary['total_tokens']} tokens. "
         f"Finish reasons: {summary['finish_reasons']}.",
         "",
-        "| Task | Template | Split | Success | Tokens | USD | Seconds | Steps | Finish |",
-        "|---:|---:|---|---|---:|---:|---:|---:|---|",
+        "## Tokens",
+        "",
+        f"Input: {usage['input_tokens']} uncached, {usage['cached_input_tokens']} read from "
+        f"cache, {usage['cache_write_tokens']} written to cache. "
+        f"Output: {usage['output_tokens']}. Cache hit rate: {summary['cache_hit_rate']:.0%}.",
+        "",
+        "| Prompt section | Mean tokens per task (estimate) | Share |",
+        "|---|---:|---:|",
+    ]
+    section_total = sum(summary["mean_section_tokens"].values()) or 1
+    for name, tokens in sorted(summary["mean_section_tokens"].items(), key=lambda item: -item[1]):
+        lines.append(f"| {name} | {tokens:.0f} | {tokens / section_total:.0%} |")
+    lines += [
+        "",
+        "## Tasks",
+        "",
+        "| Task | Template | Split | Success | Tokens | Cached | USD | Seconds | Steps | Finish |",
+        "|---:|---:|---|---|---:|---:|---:|---:|---:|---|",
     ]
     for record in records:
         lines.append(
             f"| {record['task_id']} | {record['template_id']} | {record['split']} | "
             f"{'yes' if record['success'] else 'no'} | {record['tokens']} | "
+            f"{record.get('cache_hit_rate', 0.0):.0%} | "
             f"{record['usd']:.4f} | {record['seconds']:.1f} | {record['steps']} | "
             f"{record['finish_reason']} |"
         )
@@ -219,6 +254,8 @@ def run_task(
         "steps": result.steps,
         "tokens": result.usage.total_tokens,
         "usage": asdict(result.usage),
+        "cache_hit_rate": round(cache_hit_rate(asdict(result.usage)), 4),
+        "sections": result.sections,
         "usd": result.cost_usd,
         "seconds": round(result.seconds, 2),
         "reset_seconds": round(reset_seconds, 2),

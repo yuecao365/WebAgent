@@ -17,6 +17,7 @@ from browser_agent.harness.llm import (
     LLMConfig,
     ModelError,
     OpenAIProvider,
+    Part,
     Pricing,
     SpendLedger,
     ToolCall,
@@ -26,6 +27,8 @@ from browser_agent.harness.llm import (
     UserMessage,
     estimate_tokens,
     parse_arguments,
+    section_chars,
+    section_tokens,
 )
 from browser_agent.harness.tools import TOOLS
 
@@ -179,6 +182,55 @@ def test_fatal_errors_are_not_retried(tmp_path):
 
     assert len(provider.calls) == 1
     assert sleeps == []
+
+
+# -- prompt sections ----------------------------------------------------------
+
+
+def _conversation():
+    """Task and first page, one finished step, then the current page as the tail."""
+    return [
+        UserMessage([Part("task", "T" * 100), Part("observation", "o" * 900)]),
+        AssistantMessage("", (ToolCall("c1", "click", {"ref": 1}, "x" * 95),)),
+        ToolMessage("c1", [Part("observation", "p" * 600), Part("status", "s" * 50)]),
+    ]
+
+
+def test_sections_count_only_the_last_message_as_the_current_page():
+    chars = section_chars("S" * 300, _conversation(), [])
+
+    assert chars == {
+        "system": 300,
+        "tools": 0,
+        "task": 100,
+        # The first page is history by now; so is the call (name + arguments).
+        "history": 900 + 5 + 95,
+        "observation": 600,
+        "notes": 0,
+        "status": 50,
+    }
+
+
+def test_section_tokens_share_out_the_measured_prompt():
+    tokens = section_tokens({"system": 300, "history": 600, "observation": 100}, 500)
+
+    assert tokens == {"system": 150, "history": 300, "observation": 50}
+    assert section_tokens({"system": 0}, 500) == {"system": 0}
+
+
+def test_each_call_logs_its_token_split_and_sections(tmp_path):
+    usage = Usage(input_tokens=400, cached_input_tokens=1500, cache_write_tokens=100)
+    client, _, _, _ = make_client(tmp_path, [reply(usage=usage)])
+
+    completion = client.complete("S" * 300, _conversation(), [])
+
+    entry = json.loads((tmp_path / "results" / "spend.jsonl").read_text(encoding="utf-8"))
+    assert entry["usage"]["input_tokens"] == 400
+    assert entry["usage"]["cached_input_tokens"] == 1500
+    assert entry["usage"]["cache_write_tokens"] == 100
+    assert entry["sections"] == completion.sections
+    assert sum(entry["sections"].values()) == pytest.approx(2000, abs=3)
+    assert entry["sections"]["history"] > entry["sections"]["observation"] > 0
 
 
 # -- tool-call parsing --------------------------------------------------------

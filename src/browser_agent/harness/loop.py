@@ -17,6 +17,7 @@ from browser_agent.harness.llm import (
     LLMClient,
     Message,
     ModelError,
+    Part,
     Reply,
     ToolCall,
     ToolMessage,
@@ -111,6 +112,8 @@ class RunResult:
     cost_usd: float
     seconds: float
     error: str | None = None
+    # Estimated prompt tokens by section, summed over the task's calls.
+    sections: dict[str, int] = field(default_factory=dict)
 
 
 MessageView = Callable[[Sequence[Message]], Sequence[Message]]
@@ -150,6 +153,7 @@ class AgentLoop:
         self._messages: list[Message] = []
         self._usage = Usage()
         self._cost = 0.0
+        self._sections: dict[str, int] = {}
         self._steps = 0
         self._started = 0.0
 
@@ -157,7 +161,14 @@ class AgentLoop:
         config = self._config
         self._started = self._clock()
         first = self._executor.read_page()
-        self._messages = [UserMessage(f"Task: {goal}\n\nCurrent page:\n{first.content}")]
+        self._messages = [
+            UserMessage(
+                [
+                    Part("task", f"Task: {goal}"),
+                    Part("observation", f"Current page:\n{first.content}"),
+                ]
+            )
+        ]
         self._events.append("task_start", goal=goal, url=first.url, budgets=asdict(config.budgets))
 
         last_key: str | None = None
@@ -184,7 +195,7 @@ class AgentLoop:
                 return self._end("model_refusal", error="the model declined to continue")
             if not reply.tool_calls:
                 self._events.append("nudge", step=self._steps, detail="no tool call")
-                self._messages.append(UserMessage(NUDGE))
+                self._messages.append(UserMessage(NUDGE, section="status"))
                 continue
 
             call, extra = reply.tool_calls[0], reply.tool_calls[1:]
@@ -231,10 +242,13 @@ class AgentLoop:
                     "that fits if the task cannot be done."
                 )
 
-            content = "\n\n".join([outcome.content, *notes])
-            self._messages.append(ToolMessage(call.id, content, is_error=not outcome.ok))
+            parts = [Part("observation", outcome.content)]
+            parts += [Part("status", note) for note in notes]
+            self._messages.append(ToolMessage(call.id, parts, is_error=not outcome.ok))
             for other in extra:
-                self._messages.append(ToolMessage(other.id, EXTRA_CALL, is_error=True))
+                self._messages.append(
+                    ToolMessage(other.id, EXTRA_CALL, is_error=True, section="status")
+                )
             if stuck is not None and stuck_hints > config.max_stuck_hints:
                 return self._force_finish("stuck")
 
@@ -247,6 +261,8 @@ class AgentLoop:
         reply = completion.reply
         self._usage = self._usage + reply.usage
         self._cost += completion.cost_usd
+        for name, tokens in completion.sections.items():
+            self._sections[name] = self._sections.get(name, 0) + tokens
         self._events.append(
             "model_call",
             step=self._steps,
@@ -255,6 +271,7 @@ class AgentLoop:
             tool_calls=[{"name": c.name, "arguments": c.arguments} for c in reply.tool_calls],
             stop_reason=reply.stop_reason,
             usage=asdict(reply.usage),
+            sections=completion.sections,
             cost_usd=completion.cost_usd,
             seconds=round(completion.seconds, 3),
             attempts=completion.attempts,
@@ -307,7 +324,8 @@ class AgentLoop:
         self._messages.append(
             UserMessage(
                 f"The {what} used up. Call finish now. If the objective was achieved, "
-                "report it; if not, use the status that fits and explain in error_details."
+                "report it; if not, use the status that fits and explain in error_details.",
+                section="status",
             )
         )
         self._steps += 1
@@ -337,6 +355,7 @@ class AgentLoop:
             forced=forced,
             steps=self._steps,
             usage=self._usage,
+            sections=dict(self._sections),
             cost_usd=self._cost,
             seconds=self._clock() - self._started,
             error=error,

@@ -238,7 +238,7 @@ def test_reply_without_a_tool_call_is_nudged(tmp_path):
         tmp_path, [reply(text="Let me think."), reply(call("finish", **FINISH_OK))]
     )
 
-    assert provider.calls[1]["messages"][-1] == UserMessage(NUDGE)
+    assert provider.calls[1]["messages"][-1] == UserMessage(NUDGE, section="status")
     assert "nudge" in kinds(events)
     assert result.reason == "finished"
     assert result.steps == 2
@@ -277,7 +277,7 @@ def test_only_the_first_tool_call_of_a_reply_runs(tmp_path):
     assert executor.executed[0] == ("click", {"ref": 1})
     assert ("click", {"ref": 2}) not in executor.executed
     skipped = provider.calls[1]["messages"][-1]
-    assert skipped == ToolMessage(second.id, EXTRA_CALL, is_error=True)
+    assert skipped == ToolMessage(second.id, EXTRA_CALL, is_error=True, section="status")
 
 
 def test_model_error_ends_the_task(tmp_path):
@@ -292,6 +292,20 @@ def test_refusal_ends_the_task(tmp_path):
     result, _, _, _, _ = run(tmp_path, [reply(stop="refusal")])
 
     assert result.reason == "model_refusal"
+
+
+def test_prompt_sections_are_totalled_per_task(tmp_path):
+    result, _, _, events, _ = run(
+        tmp_path, [reply(call("click", ref=1)), reply(call("finish", **FINISH_OK))]
+    )
+
+    calls = [event for event in events.events if event["type"] == "model_call"]
+    # Each scripted call reports 1000 prompt tokens; the sections share them out.
+    assert sum(result.sections.values()) == pytest.approx(2000, abs=6)
+    assert result.sections["task"] > 0
+    assert calls[0]["sections"]["history"] == 0
+    assert calls[1]["sections"]["history"] > 0
+    assert calls[1]["sections"]["observation"] > 0
 
 
 def test_history_view_decides_what_the_model_sees(tmp_path):

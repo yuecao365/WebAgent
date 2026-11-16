@@ -34,9 +34,33 @@ class ToolCall:
     raw_arguments: str = ""
 
 
+# Prompt sections, the units token use is reported in. "history" is everything
+# before the last message that is not the task.
+SECTIONS = ("system", "tools", "task", "history", "observation", "notes", "status")
+
+
 @dataclass(frozen=True)
+class Part:
+    """A piece of a message, labelled with the prompt section it belongs to."""
+
+    section: str
+    text: str
+
+
+def _parts(content: str | Sequence[Part], section: str) -> tuple[Part, ...]:
+    return (Part(section, content),) if isinstance(content, str) else tuple(content)
+
+
+@dataclass(frozen=True, init=False)
 class UserMessage:
-    content: str
+    parts: tuple[Part, ...]
+
+    def __init__(self, content: str | Sequence[Part], section: str = "history") -> None:
+        object.__setattr__(self, "parts", _parts(content, section))
+
+    @property
+    def content(self) -> str:
+        return "\n\n".join(part.text for part in self.parts)
 
 
 @dataclass(frozen=True)
@@ -48,11 +72,26 @@ class AssistantMessage:
     native: Any = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ToolMessage:
     tool_call_id: str
-    content: str
-    is_error: bool = False
+    parts: tuple[Part, ...]
+    is_error: bool
+
+    def __init__(
+        self,
+        tool_call_id: str,
+        content: str | Sequence[Part],
+        is_error: bool = False,
+        section: str = "history",
+    ) -> None:
+        object.__setattr__(self, "tool_call_id", tool_call_id)
+        object.__setattr__(self, "parts", _parts(content, section))
+        object.__setattr__(self, "is_error", is_error)
+
+    @property
+    def content(self) -> str:
+        return "\n\n".join(part.text for part in self.parts)
 
 
 Message = UserMessage | AssistantMessage | ToolMessage
@@ -549,6 +588,51 @@ class Completion:
     cost_usd: float
     seconds: float
     attempts: int
+    # Estimated prompt tokens per section; they sum to the measured prompt tokens.
+    sections: dict[str, int] = field(default_factory=dict)
+
+
+def _tools_chars(tools: Sequence[ToolSpec]) -> int:
+    return sum(
+        len(spec.name) + len(spec.description) + len(json.dumps(spec.parameters)) for spec in tools
+    )
+
+
+def section_chars(
+    system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
+) -> dict[str, int]:
+    """Characters of the prompt by section.
+
+    Parts of the last message count under their own section: it is the tail that
+    changes every step. In earlier messages the task keeps its section and the rest
+    is history, whatever it was when it was the tail.
+    """
+    chars = dict.fromkeys(SECTIONS, 0)
+    chars["system"] = len(system)
+    chars["tools"] = _tools_chars(tools)
+    last = len(messages) - 1
+    for index, message in enumerate(messages):
+        if isinstance(message, AssistantMessage):
+            chars["history"] += len(message.text) + sum(
+                len(call.name) + len(call.raw_arguments) for call in message.tool_calls
+            )
+            continue
+        for part in message.parts:
+            section = part.section if index == last or part.section == "task" else "history"
+            chars[section if section in chars else "history"] += len(part.text)
+    return chars
+
+
+def section_tokens(chars: dict[str, int], prompt_tokens: int) -> dict[str, int]:
+    """Share the measured prompt tokens among the sections in proportion to their size.
+
+    Only the total is measured; the split assumes every section has about the same
+    number of characters per token, so it is an estimate.
+    """
+    total = sum(chars.values())
+    if total == 0:
+        return dict.fromkeys(chars, 0)
+    return {name: round(prompt_tokens * count / total) for name, count in chars.items()}
 
 
 def estimate_tokens(system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]) -> int:
@@ -627,18 +711,24 @@ class LLMClient:
                 self._sleep(min(2.0**attempt, 30.0) * (0.5 + random.random() / 2))
         seconds = self._clock() - started
         cost = self.pricing.cost(reply.usage)
+        usage = reply.usage
+        prompt_tokens = usage.input_tokens + usage.cached_input_tokens + usage.cache_write_tokens
+        sections = section_tokens(section_chars(system, messages, tools), prompt_tokens)
         self.ledger.record(
             {
                 "ts": datetime.now(UTC).isoformat(timespec="seconds"),
                 **self._labels,
                 "model": self.model,
-                "usage": asdict(reply.usage),
+                "usage": asdict(usage),
+                "sections": sections,
                 "cost_usd": cost,
                 "attempts": attempt,
                 "seconds": round(seconds, 3),
             }
         )
-        return Completion(reply=reply, cost_usd=cost, seconds=seconds, attempts=attempt)
+        return Completion(
+            reply=reply, cost_usd=cost, seconds=seconds, attempts=attempt, sections=sections
+        )
 
 
 def client_from_env(results_dir: Path, prompt_caching: bool = False) -> LLMClient:
@@ -662,6 +752,7 @@ __all__ = [
     "LLMConfig",
     "Message",
     "ModelError",
+    "Part",
     "Pricing",
     "Provider",
     "Reply",

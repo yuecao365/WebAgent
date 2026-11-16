@@ -103,8 +103,42 @@ def test_summary_counts_failures_in_the_means():
     assert summary["finish_reasons"] == {"finished": 1, "budget_steps": 1}
 
 
+def test_summary_reports_the_token_split_cache_rate_and_sections():
+    base = {"success": True, "tokens": 0, "usd": 0.0, "seconds": 1.0, "steps": 1}
+    records = [
+        {
+            **base,
+            "finish_reason": "finished",
+            "usage": {"input_tokens": 100, "cached_input_tokens": 700, "cache_write_tokens": 200},
+            "sections": {"system": 300, "history": 500, "observation": 200},
+        },
+        {
+            **base,
+            "finish_reason": "finished",
+            "usage": {"input_tokens": 900, "cached_input_tokens": 100, "output_tokens": 40},
+            "sections": {"system": 300, "history": 100, "observation": 600},
+        },
+    ]
+
+    summary = summarize(records)
+
+    assert summary["usage"] == {
+        "input_tokens": 1000,
+        "cached_input_tokens": 800,
+        "cache_write_tokens": 200,
+        "output_tokens": 40,
+    }
+    assert summary["cache_hit_rate"] == pytest.approx(0.4)
+    assert summary["mean_section_tokens"] == {"system": 300, "history": 300, "observation": 400}
+    assert runner.cache_hit_rate(records[0]["usage"]) == pytest.approx(0.7)
+    text = runner.summary_markdown("run", "m", summary, [])
+    assert "Cache hit rate: 40%." in text
+    assert "| observation | 400 | 40% |" in text
+
+
 def test_summary_of_nothing():
     assert summarize([])["success_rate"] == 0.0
+    assert summarize([])["cache_hit_rate"] == 0.0
 
 
 def test_summary_markdown_has_a_row_per_task():
@@ -116,7 +150,7 @@ def test_summary_markdown_has_a_row_per_task():
     text = runner.summary_markdown("2026-11-16_smoke", "some-model", summarize([record]), [record])
 
     assert "Success: 1/1 (100%)" in text
-    assert "| 288 | 234 | learn | yes | 1234 | 0.0123 | 45.6 | 7 | finished |" in text
+    assert "| 288 | 234 | learn | yes | 1234 | 0% | 0.0123 | 45.6 | 7 | finished |" in text
 
 
 # -- site control ---------------------------------------------------------------
