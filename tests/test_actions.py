@@ -61,6 +61,14 @@ def test_disabled_elements_are_not_clicked():
     assert browser.clicks == []
 
 
+def test_type_reports_a_field_that_did_not_take_the_text_as_typed():
+    browser = FakeBrowser()
+    browser.element(3, tag="input")
+    browser.masks[3] = "12.00"
+
+    assert actions.type_text(browser, 3, "12") == "Typed '12' into [3]. The field reads '12.00'."
+
+
 def test_type_replaces_the_content_and_can_submit():
     browser = FakeBrowser()
     browser.element(3, tag="input")

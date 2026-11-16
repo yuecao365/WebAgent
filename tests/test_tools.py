@@ -231,6 +231,20 @@ def test_read_page_without_a_section_waits_and_reads_again():
     assert browser.settled == 1
 
 
+def test_after_read_page_the_next_view_is_the_whole_page_not_a_diff():
+    previous_pages = []
+    tools = executor(render=lambda observation, previous: previous_pages.append(previous) or "x")
+
+    tools.view()
+    tools.view()
+    tools.execute("read_page", {"section": None})
+    tools.view()
+    tools.view()
+
+    # The renderer diffs against the previous page; None makes it show everything.
+    assert [page is None for page in previous_pages] == [True, False, True, False]
+
+
 def test_read_page_section_returns_the_detail_separately():
     def render_section(observation, ref):
         return "row A\nrow B" if ref == 7 else None

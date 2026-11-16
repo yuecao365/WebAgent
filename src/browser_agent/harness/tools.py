@@ -290,6 +290,7 @@ class ToolExecutor:
         self._render_section = render_section
         self._specs = {spec.name: spec for spec in TOOLS}
         self._previous: Observation | None = None
+        self._show_whole_page = False
 
     def execute(self, name: str, arguments: Any) -> ToolOutcome:
         """Run one tool call; every failure comes back as an outcome the model can read."""
@@ -318,8 +319,11 @@ class ToolExecutor:
     def view(self) -> PageView:
         """Read the page as it is now. Called once per step, after the step's calls."""
         observation = observe(self._browser)
-        text = self._render(observation, self._previous)
+        # After read_page the model asked for the whole page, so it gets no diff.
+        previous = None if self._show_whole_page else self._previous
+        text = self._render(observation, previous)
         self._previous = observation
+        self._show_whole_page = False
         return PageView(text, observation.fingerprint(), observation.url, observation.title)
 
     def recover(self, url: str) -> ToolOutcome:
@@ -359,6 +363,7 @@ class ToolExecutor:
     def _read(self, args: ReadPageArgs) -> ToolOutcome:
         if args.section is None:
             self._browser.settle()
+            self._show_whole_page = True
             return ToolOutcome(True, "Read the page again.")
         if self._render_section is None:
             return ToolOutcome(True, "The page text already shows every element in full.")

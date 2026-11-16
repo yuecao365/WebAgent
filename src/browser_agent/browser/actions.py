@@ -77,6 +77,12 @@ _FIRE_CHANGE_JS = f"""function() {{
   el.dispatchEvent(new Event('change', {{bubbles: true}}));
 }}"""
 
+_READ_VALUE_JS = f"""function() {{
+  {_ELEMENT}
+  const value = 'value' in el ? el.value : el.textContent;
+  return String(value == null ? '' : value).slice(0, 200);
+}}"""
+
 _SCRIPT_CLICK_JS = f"""function() {{
   {_ELEMENT}
   el.click();
@@ -176,11 +182,16 @@ def type_text(browser: Browser, ref: int, text: str, submit: bool = False) -> st
         browser.press_key("Backspace")
     # Some form bindings only pick the value up on a change event.
     _call(browser, ref, _FIRE_CHANGE_JS)
+    # Read the field back before Enter can replace the page: an input mask or a
+    # length limit may have changed what was typed.
+    value = _call(browser, ref, _READ_VALUE_JS)
     if submit:
         browser.press_key("Enter")
     browser.settle()
     suffix = " and pressed Enter" if submit else ""
-    return f"Typed {text!r} into [{ref}]{suffix}."
+    differs = value is not None and value != text
+    note = f" The field reads {value!r}." if differs else ""
+    return f"Typed {text!r} into [{ref}]{suffix}.{note}"
 
 
 def scroll(browser: Browser, direction: Literal["up", "down"]) -> str:

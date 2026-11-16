@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from browser_agent.browser import actions
 from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
+from browser_agent.context.observe import PageRenderer, ViewOptions
 from browser_agent.eval.webarena import ShoppingAdmin, SiteConfig, load_subset
 from browser_agent.harness.events import EventLog
 from browser_agent.harness.llm import LLMClient, client_from_env
@@ -49,8 +50,21 @@ class Switches(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Observation: show only what can be acted on and what can be read.
+    prune_observation: bool = False
+    # Observation: count the tail of long runs of rows and options instead of listing it.
+    truncate_lists: bool = False
+    # Observation: show only what changed while the page stays the same document.
+    diff_observation: bool = False
     # Run every tool call of a reply instead of only the first.
     multi_action: bool = False
+
+    def view_options(self) -> ViewOptions:
+        return ViewOptions(
+            prune=self.prune_observation,
+            truncate=self.truncate_lists,
+            diff=self.diff_observation,
+        )
 
 
 class RunConfig(BaseModel):
@@ -212,9 +226,16 @@ def run_task(
     actions.goto(browser, task.start_url)
 
     events = EventLog(trace_dir / "events.jsonl")
+    # One renderer per task: it remembers the last page to diff against.
+    renderer = PageRenderer(config.switches.view_options())
     loop = AgentLoop(
         llm=llm.labelled(run=run_dir.name, task_id=task.task_id),
-        executor=ToolExecutor(browser, allowed_origins=[origin_of(env.site.url)]),
+        executor=ToolExecutor(
+            browser,
+            allowed_origins=[origin_of(env.site.url)],
+            render=renderer.render,
+            render_section=renderer.section,
+        ),
         events=events,
         config=LoopConfig(
             budgets=Budgets(**config.budgets.model_dump()),

@@ -137,6 +137,8 @@ class FakeBrowser:
         self.options: dict[int, list[str]] = {}
         # refs whose click loads a new document, with the URL it leads to
         self.links: dict[int, str] = {}
+        # ref -> the value the field shows whatever was typed into it
+        self.masks: dict[int, str] = {}
         self.navigate_error: str | None = None
         self.dialog: dict[str, Any] | None = None
         self.cdp_calls: list[tuple[str, dict[str, Any]]] = []
@@ -199,6 +201,10 @@ class FakeBrowser:
             return {"ok": True, "chosen": match} if match else {"ok": False, "options": labels}
         if "closest('select')" in source:
             return True
+        if "'value' in el" in source:
+            # What the field holds after typing; `masks` models a field that alters it.
+            typed = self.typed[-1] if self.typed else ""
+            return self.masks.get(ref, typed)
         return None
 
     def click_at(self, x: float, y: float) -> None:

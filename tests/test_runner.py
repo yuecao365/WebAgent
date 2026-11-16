@@ -51,6 +51,17 @@ def test_switches_are_off_by_default_and_unknown_ones_are_rejected():
         RunConfig.model_validate({"name": "x", "budgets": {"max_stepz": 3}})
 
 
+def test_switches_select_the_observation_components():
+    config = RunConfig.model_validate(
+        {"name": "x", "switches": {"prune_observation": True, "truncate_lists": True}}
+    )
+
+    options = config.switches.view_options()
+
+    assert (options.prune, options.truncate, options.diff) == (True, True, False)
+    assert not config.switches.multi_action
+
+
 def test_checked_in_configs_are_valid():
     for path in sorted((runner.Path(__file__).resolve().parents[1] / "configs").glob("*.json")):
         if path.name != "subset.json":
