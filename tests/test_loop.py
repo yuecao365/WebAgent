@@ -342,7 +342,7 @@ def test_invalid_finish_is_returned_to_the_model(tmp_path):
 
 def test_only_the_first_tool_call_runs_by_default(tmp_path):
     first, second = call("click", ref=1), call("click", ref=2)
-    _, provider, executor, _, _ = run(
+    _, provider, executor, events, _ = run(
         tmp_path, [reply(first, second), reply(call("finish", **FINISH_OK))]
     )
 
@@ -350,6 +350,8 @@ def test_only_the_first_tool_call_runs_by_default(tmp_path):
     assert ("click", {"ref": 2}) not in executor.executed
     skipped = provider.calls[1]["messages"][-2]
     assert skipped == ToolMessage(second.id, EXTRA_CALL, is_error=True)
+    logged = [event for event in events.events if event["type"] == "tool_skipped"]
+    assert [(event["name"], event["reason"]) for event in logged] == [("click", "single_action")]
 
 
 def test_the_working_note_is_shown_in_the_tail_until_replaced(tmp_path):
@@ -394,6 +396,8 @@ def test_model_error_ends_the_task(tmp_path):
     assert result.reason == "model_error"
     assert "400" in result.error
     assert events.events[-1]["type"] == "task_end"
+    failed_call = events.events[-2]
+    assert (failed_call["type"], failed_call["attempts"]) == ("model_error", 1)
 
 
 def test_refusal_ends_the_task(tmp_path):

@@ -22,6 +22,7 @@ from browser_agent.browser import actions
 from browser_agent.browser.actions import ActionError
 from browser_agent.browser.observation import Observation, observe
 from browser_agent.browser.session import Browser, BrowserError, origin_of
+from browser_agent.harness.events import Notify
 
 TaskType = Literal["RETRIEVE", "MUTATE", "NAVIGATE"]
 Status = Literal[
@@ -297,9 +298,12 @@ class ToolExecutor:
         render_section: SectionRenderer | None = None,
         search: PageSearch | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        notify: Notify | None = None,
     ) -> None:
         self._search = search
         self._sleep = sleep
+        # Where fallbacks taken in here are reported; normally the task's event log.
+        self._notify = notify
         self._browser = browser
         self._allowed_origins = frozenset(origin.lower() for origin in allowed_origins)
         self._render = render
@@ -348,14 +352,25 @@ class ToolExecutor:
         A page in the middle of loading can leave a script call unanswered for a few
         seconds. Without a second try that ended the whole task with a harness error.
         """
+        error = ""
         for attempt in range(1, READ_ATTEMPTS + 1):
             try:
-                return observe(self._browser)
-            except BrowserError:
+                observation = observe(self._browser)
+            except BrowserError as exc:
                 if attempt == READ_ATTEMPTS:
+                    self._report_retry(attempt - 1, ok=False, error=str(exc))
                     raise
+                error = str(exc)
                 self._sleep(2.0 * attempt)
+                continue
+            if attempt > 1:
+                self._report_retry(attempt - 1, ok=True, error=error)
+            return observation
         raise AssertionError("unreachable")
+
+    def _report_retry(self, retries: int, ok: bool, error: str) -> None:
+        if self._notify is not None:
+            self._notify("page_read_retry", retries=retries, ok=ok, error=error[:200])
 
     def recover(self, url: str) -> ToolOutcome:
         """Return to a page that worked before, after repeated failures."""

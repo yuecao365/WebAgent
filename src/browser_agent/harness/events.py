@@ -2,16 +2,29 @@
 
 The log is the record of truth for a run: per-task numbers in the results are
 recomputed from it, so a number can always be traced back to the events behind it.
+
+Besides the steps (observation, model_call, tool_call, tool_result) the log holds
+every fallback the harness took (nudge, tool_skipped, stuck, recovery, budget,
+page_read_retry, settle_timeout, provider_fallback, model_error, self_check,
+harness_error) and the score (task_scored). eval/fallbacks.py counts them.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+# Written into task_start. Version 2 added the events for fallbacks that used to
+# leave no trace (busy-page retries, settle timeouts, provider downgrades, the
+# reason a call was skipped) and the score. A log without it is version 1.
+LOG_VERSION = 2
+
+# The shape of EventLog.append, for the parts of the harness that only report.
+Notify = Callable[..., Any]
 
 
 class EventLog:
@@ -25,6 +38,20 @@ class EventLog:
             if path.exists():
                 raise FileExistsError(f"{path} exists; an event log is never overwritten")
             path.touch()
+
+    @classmethod
+    def resume(cls, path: Path) -> EventLog:
+        """Continue the log at path, creating it if the task never got to write one.
+
+        For what is only known after the loop has ended: the score, or the error
+        that stopped the harness.
+        """
+        if not path.exists():
+            return cls(path)
+        log = cls()
+        log.path = path
+        log.events = read_events(path)
+        return log
 
     def append(self, kind: str, **payload: Any) -> dict[str, Any]:
         event = {

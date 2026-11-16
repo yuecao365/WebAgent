@@ -100,3 +100,24 @@ def test_replay_keeps_forced_steps_and_notes(tmp_path):
     assert rebuilt.steps[1].notes == ["stuck: the same call was made 2 times in a row"]
     assert rebuilt.finish_reason == "stuck"
     assert rebuilt.response is None
+
+
+def test_a_log_can_be_continued_after_the_loop_has_ended(tmp_path):
+    path = tmp_path / "traces" / "7" / "events.jsonl"
+    log = EventLog(path)
+    log.append("task_start", goal="goal")
+    log.append("task_end", reason="finished")
+
+    EventLog.resume(path).append("task_scored", success=True)
+
+    events = read_events(path)
+    assert [event["type"] for event in events] == ["task_start", "task_end", "task_scored"]
+    assert [event["seq"] for event in events] == [0, 1, 2]
+
+
+def test_resuming_a_log_that_was_never_written_starts_one(tmp_path):
+    path = tmp_path / "traces" / "8" / "events.jsonl"
+
+    EventLog.resume(path).append("harness_error", error="BrowserError: gone")
+
+    assert [event["type"] for event in read_events(path)] == ["harness_error"]

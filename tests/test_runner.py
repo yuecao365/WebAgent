@@ -9,8 +9,10 @@ import pytest
 from pydantic import ValidationError
 
 from browser_agent.eval import runner
+from browser_agent.eval.fallbacks import TaskLog, build_ledger
 from browser_agent.eval.runner import RunConfig, new_run_dir, select_tasks, summarize
 from browser_agent.eval.webarena import ShoppingAdmin, SiteConfig, SiteError
+from browser_agent.harness.events import EventLog
 
 
 def write_subset(root, count=8):
@@ -355,3 +357,23 @@ def test_tasks_are_rendered_for_the_local_site():
     assert task.template_id == 234
     assert task.start_url == "http://localhost:7780/admin"
     assert "most cancellations" in task.intent
+
+
+def test_summary_markdown_ends_with_the_fallback_ledger():
+    record = {
+        "task_id": 288, "template_id": 234, "split": "learn", "success": True, "tokens": 1234,
+        "usd": 0.0123, "seconds": 45.6, "steps": 7, "finish_reason": "finished",
+    }  # fmt: skip
+    log = EventLog()
+    log.append("task_start", goal="g", log_version=2)
+    log.append("nudge", step=1, detail="no tool call")
+    log.append("task_end", reason="finished", response={"status": "SUCCESS"})
+    log.append("task_scored", success=True)
+    summary = summarize([record])
+    summary["fallbacks"] = build_ledger([TaskLog(288, log.events)])
+
+    text = runner.summary_markdown("2026-11-16_smoke", "some-model", summary, [record])
+
+    assert "## Fallbacks" in text
+    assert "| Reply without a tool call, nudged | 1 | 1 | 0/1 | 1/1 |" in text
+    assert "a correlation, not a rescue rate" in text

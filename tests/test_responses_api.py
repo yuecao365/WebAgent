@@ -196,10 +196,12 @@ def test_a_rejected_reasoning_setting_is_dropped_and_stays_dropped():
     sdk = Replay(_status_error("BadRequestError", 400), first["parsed"])
     provider = OpenAIResponsesProvider(sdk, "plain-model")
 
-    provider.complete("s", [TASK], TOOLS, OPTIONS)
-    provider.complete("s", [TASK], TOOLS, OPTIONS)
+    first_reply = provider.complete("s", [TASK], TOOLS, OPTIONS)
+    second_reply = provider.complete("s", [TASK], TOOLS, OPTIONS)
 
     assert ["reasoning" in request for request in sdk.requests] == [True, False, False]
+    assert first_reply.fallbacks == ("effort_downgraded: low -> omitted",)
+    assert second_reply.fallbacks == ()
 
 
 @pytest.mark.parametrize(

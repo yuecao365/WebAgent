@@ -158,6 +158,7 @@ def test_transient_errors_are_retried_with_growing_waits(tmp_path):
     completion = client.complete("system", [UserMessage("hi")], [])
 
     assert completion.attempts == 3
+    assert completion.retry_errors == ("rate limited", "503")
     assert len(provider.calls) == 3
     assert len(sleeps) == 2
     assert 1.0 <= sleeps[0] <= 2.0
@@ -171,11 +172,13 @@ def test_retries_give_up(tmp_path):
         tmp_path, [TransientModelError("down")] * 3, max_retries=2
     )
 
-    with pytest.raises(TransientModelError):
+    with pytest.raises(TransientModelError) as caught:
         client.complete("system", [UserMessage("hi")], [])
 
     assert len(provider.calls) == 3
     assert len(sleeps) == 2
+    # The error says how often the request was sent, for the event log.
+    assert caught.value.attempts == 3
 
 
 def test_fatal_errors_are_not_retried(tmp_path):
@@ -456,9 +459,12 @@ def test_openai_retries_with_effort_none_when_a_request_is_rejected():
     options = CallOptions(500, "task-7", False, "low")
 
     result = provider.complete("s", HISTORY, TOOLS, options)
-    provider.complete("s", HISTORY, TOOLS, options)
+    later = provider.complete("s", HISTORY, TOOLS, options)
 
     assert result.tool_calls[0].name == "click"
+    # Reported with the call in which it happened, and only there.
+    assert result.fallbacks == ("effort_downgraded: low -> none",)
+    assert later.fallbacks == ()
     first, second, third = recorder.requests
     assert first["reasoning_effort"] == "low"
     # Only the effort changed; strict tools and the cache key are still there.
@@ -475,8 +481,9 @@ def test_openai_then_drops_the_effort_field_and_last_every_optional_field():
     provider, recorder = _openai_provider(rejected, rejected, rejected, _openai_response())
     options = CallOptions(500, "task-7", False, "low")
 
-    provider.complete("s", HISTORY, TOOLS, options)
-    provider.complete("s", HISTORY, TOOLS, options)
+    result = provider.complete("s", HISTORY, TOOLS, options)
+    assert result.fallbacks == ("effort_downgraded: low -> omitted", "minimal_mode")
+    assert provider.complete("s", HISTORY, TOOLS, options).fallbacks == ()
 
     first, second, third, fourth, fifth = recorder.requests
     assert [r.get("reasoning_effort") for r in (first, second, third)] == ["low", "none", None]
@@ -620,8 +627,9 @@ def test_anthropic_drops_the_effort_setting_when_the_model_rejects_it():
     rejected = _status_error(anthropic, "BadRequestError", 400)
     provider, recorder = _anthropic_provider(rejected, _anthropic_response())
 
-    provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low"))
-    provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low"))
+    result = provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low"))
+    assert result.fallbacks == ("effort_downgraded: low -> omitted",)
+    assert provider.complete("s", HISTORY, TOOLS, CallOptions(effort="low")).fallbacks == ()
 
     first, second, third = recorder.requests
     assert "output_config" in first

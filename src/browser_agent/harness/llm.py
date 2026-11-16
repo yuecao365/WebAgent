@@ -138,6 +138,9 @@ class Reply:
     usage: Usage
     stop_reason: str
     native: Any = None
+    # What the provider had to give up to get this reply, such as
+    # "effort_downgraded: low -> none" or "minimal_mode". Empty on a normal call.
+    fallbacks: tuple[str, ...] = ()
 
     def message(self) -> AssistantMessage:
         return AssistantMessage(self.text, self.tool_calls, self.native)
@@ -154,6 +157,8 @@ class ModelError(RuntimeError):
     def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+        # How many times the client had sent the request when it gave up.
+        self.attempts = 1
 
 
 class TransientModelError(ModelError):
@@ -293,6 +298,11 @@ def parse_arguments(raw: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _effort_change(before: str | None, after: str | None) -> str:
+    """How a provider reports that the reasoning effort it was asked for was refused."""
+    return f"effort_downgraded: {before or 'omitted'} -> {after or 'omitted'}"
+
+
 def _call_openai(
     create: Callable[..., Any], request: dict[str, Any], first_error: ModelError | None = None
 ) -> Any:
@@ -339,7 +349,7 @@ class OpenAIProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
     ) -> Reply:
-        response = self._send_with_fallback(system, messages, tools, options)
+        response, fallbacks = self._send_with_fallback(system, messages, tools, options)
         choice = response.choices[0]
         calls = tuple(
             ToolCall(
@@ -355,6 +365,7 @@ class OpenAIProvider:
             tool_calls=calls,
             usage=self._usage(response.usage),
             stop_reason=choice.finish_reason or "",
+            fallbacks=fallbacks,
         )
 
     def _send_with_fallback(
@@ -363,14 +374,15 @@ class OpenAIProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSpec],
         options: CallOptions,
-    ) -> Any:
+    ) -> tuple[Any, tuple[str, ...]]:
         """Send the request; when it is rejected, send it again in the next mode.
 
         The modes, in order: the effort as configured; effort "none" (some models
         accept function tools on this API only without reasoning); no effort field
         (models without the setting); and last a request without any optional field.
         The mode that works is kept, so later calls are not rejected again. What the
-        model is shown is the same in every mode.
+        model is shown is the same in every mode. Returned with the response: what
+        this call had to give up, for the event log.
         """
         modes: list[tuple[str | None, bool]] = []
         for mode in ((options.effort, False), ("none", False), (None, False), (None, True)):
@@ -391,7 +403,13 @@ class OpenAIProvider:
                 first_error = first_error or exc
                 continue
             self._mode, self._minimal = index, minimal
-            return response
+            fallbacks: list[str] = []
+            first_effort, was_minimal = modes[start]
+            if effort != first_effort:
+                fallbacks.append(_effort_change(first_effort, effort))
+            if minimal and not was_minimal:
+                fallbacks.append("minimal_mode")
+            return response, tuple(fallbacks)
         raise first_error or ModelError("no request mode left to try")
 
     def _request(
@@ -497,6 +515,7 @@ class OpenAIResponsesProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
     ) -> Reply:
+        fallbacks: tuple[str, ...] = ()
         try:
             response = self._send(self._request(system, messages, tools, options))
         except ModelError as exc:
@@ -506,6 +525,7 @@ class OpenAIResponsesProvider:
             # A model without a reasoning setting: try once without it.
             self._no_effort = True
             response = self._send(self._request(system, messages, tools, options), first_error=exc)
+            fallbacks = (_effort_change(options.effort, None),)
 
         text_parts: list[str] = []
         calls: list[ToolCall] = []
@@ -561,6 +581,7 @@ class OpenAIResponsesProvider:
             usage=self._usage(response.usage),
             stop_reason=stop_reason,
             native=native,
+            fallbacks=fallbacks,
         )
 
     def _request(
@@ -674,6 +695,7 @@ class AnthropicProvider:
         tools: Sequence[ToolSpec],
         options: CallOptions,
     ) -> Reply:
+        fallbacks: tuple[str, ...] = ()
         try:
             response = self._send(self._request(system, messages, tools, options))
         except ModelError as exc:
@@ -683,6 +705,7 @@ class AnthropicProvider:
             # Older models have no effort setting; try once without it.
             self._no_effort = True
             response = self._send(self._request(system, messages, tools, options), first_error=exc)
+            fallbacks = (_effort_change(options.effort, None),)
 
         text = "".join(block.text for block in response.content if block.type == "text")
         calls = tuple(
@@ -707,6 +730,7 @@ class AnthropicProvider:
             ),
             stop_reason=response.stop_reason or "",
             native=response.content,
+            fallbacks=fallbacks,
         )
 
     def _request(
@@ -952,6 +976,8 @@ class Completion:
     sections: dict[str, int] = field(default_factory=dict)
     # The reply came from the development response cache: no call was made or paid.
     from_cache: bool = False
+    # The error of each attempt that was retried, in order.
+    retry_errors: tuple[str, ...] = ()
 
 
 def _message_record(message: Message) -> dict[str, Any]:
@@ -1152,20 +1178,29 @@ class LLMClient:
 
         started = self._clock()
         attempt = 0
+        retry_errors: list[str] = []
         while True:
             attempt += 1
             try:
                 reply = self._provider.complete(system, messages, tools, options)
                 break
-            except TransientModelError:
+            except TransientModelError as exc:
                 if attempt > self._max_retries:
+                    exc.attempts = attempt
                     raise
+                retry_errors.append(str(exc)[:200])
                 # Exponential backoff with jitter, capped at 30 seconds.
                 self._sleep(min(2.0**attempt, 30.0) * (0.5 + random.random() / 2))
+            except ModelError as exc:
+                exc.attempts = attempt
+                raise
         seconds = self._clock() - started
         if self._cache is not None and cache_key is not None:
             self._cache.put(cache_key, reply)
-        return self._finish(reply, system, messages, tools, seconds, attempt, from_cache=False)
+        completion = self._finish(
+            reply, system, messages, tools, seconds, attempt, from_cache=False
+        )
+        return replace(completion, retry_errors=tuple(retry_errors))
 
     def _finish(
         self,

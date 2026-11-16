@@ -559,3 +559,83 @@
   - 选 B2（同样的成功数，贵一点、慢一点；它不依赖 Responses API，作为退路保留）。
   - 选 A 或 D（成功不更高，token 多 10 倍，D 还把预算用完过）。
   - 默认打开 `multi_action` 或 `diff_observation`（这四组里没有测，没有依据）。
+
+## 2026-11-16 兜底账本（fallback ledger）
+
+- **决定**：每次运行报告每种兜底触发了多少次、之后怎么样。账本只从事件日志算出来
+  （`eval/fallbacks.py`），所以任何还留着 traces 的旧运行都能重算；
+  `scripts/fallback_ledger.py results/<run> ...` 就是做这个的（`--sum` 把几次运行加起来，
+  `--save` 另存 `fallbacks.json/.md`，不动运行自己的 summary）。新运行的 `summary.json`
+  和 `summary.md` 里直接带账本。
+- **代码里的全部兜底**（括号里是账本的键）：
+  - 模型发来的东西不能用：工具参数不是 JSON（`bad_arguments`）；参数不符合 schema 或
+    工具名不存在（`invalid_arguments`）；finish 不合法（`invalid_finish`）；回复里没有工具
+    调用，催一次（`nudge`）；多余的调用被跳过，分三种原因：单动作模式
+    （`skipped_single_action`）、前一个调用失败（`skipped_after_failure`）、前一个调用换了
+    页面（`skipped_after_navigation`）。
+  - 工具调用失败：把错误还给模型（`tool_error`）；连续失败后回到上一个稳定的 URL
+    （`recovery`）；元素没有可点的框，改用脚本点击（`script_click`）；原生对话框自动接受
+    （`dialog_accepted`）；过长的工具结果被截短（`result_cut`）。
+  - 页面：页面忙、读页面重试（`page_read_retry`）；settle 等到超时（`settle_timeout`）；
+    展示了被截断的列表或表格（`cut_list_shown`）；之后模型用 `read_page(find/section)`
+    去看被截掉的部分（`cut_list_read`）。
+  - 循环：卡住提示（`stuck_hint`）；按卡住结束（`ended_stuck`）；预算用完强制 finish
+    （`forced_finish`）；任务结束时没有答案，评测时用占位答案（`no_answer`）；finish 前
+    自检（`self_check`，下一条决定）。
+  - 模型接口：429/5xx/超时重试（`model_retry`）；推理强度被拒后降级
+    （`effort_downgraded`）；切到最小请求模式（`minimal_mode`）；因模型错误、模型拒绝、
+    花费上限而结束（`model_error`、`model_refusal`、`spend_cap`）。
+  - 运行层面：只读任务意外写入，下一个任务前多 reset 一次（`unexpected_write`）；
+    harness 出错、任务没跑完（`harness_error`）。
+  - 没有计入的：diff 视图在变化太大时退回整页（开关默认关，没用到）；启动站点时的等待
+    重试（发生在任务之外）。
+- **原来不留事件、这次补上的**：`page_read_retry`、`settle_timeout`、
+  `provider_fallback`（推理降级、最小模式）、`model_error`（带尝试次数）、`tool_skipped`
+  的 `reason`、`model_call` 的 `retry_errors`、`harness_error`、`task_scored`（评测结果）。
+  `task_start` 里写 `log_version: 2`；没有这个字段的是版本 1 的旧日志。
+- **每一列的定义**（代码里在 `eval/fallbacks.py` 的文档字符串）：
+  - 触发：一共触发了多少次；任务：在多少个任务里触发过。
+  - 恢复：触发之后，兜底想要的结果有没有出现，只对有意义的类型给出。
+    “下一步成功”= 触发后的下一次模型调用至少发了一个工具调用，而且执行了的调用都没有
+    报错。用这个定义的有：`bad_arguments`、`invalid_arguments`、`invalid_finish`、`nudge`、
+    `tool_error`；`recovery` 还要求回退本身成功。重试类看重试的那件事最后成没成：
+    `model_retry` 看调用是否最终成功，`page_read_retry` 看页面是否读到。`cut_list_read`
+    看读回来有没有内容；`stuck_hint` 看任务是否没有以卡住结束；`forced_finish` 和
+    `ended_stuck` 看最后有没有给出答案；`self_check` 看两次 finish 的答案是否不同。
+  - 任务成功：触发过它的任务里，被评测器判成功的有几个。**这是相关，不是挽救率**：
+    兜底可能出现在一个因为别的原因成功的任务里，也可能完全起了作用而任务后来因为别的
+    原因失败。只有“恢复”一列说的是兜底本身，而且只说紧接着的那一步。
+- **评测结果的来源**：新日志里是 `task_scored` 事件。版本 1 的日志没有这个事件，重算时
+  从同目录的 `records.jsonl` 取成功与否（只取这一项和意外写入的数量）。版本 1 没有记录的
+  几种兜底在表下面单独列为“未记录”，不当作 0。
+- **在两次旧运行上重算的结果**（版本 1 的日志）：
+
+  `2026-11-16_learn_b2`：15 个任务，12 个成功。
+
+  | 兜底 | 触发 | 任务 | 恢复 | 任务成功 |
+  |---|---:|---:|---:|---:|
+  | 工具调用失败，错误还给模型 | 2 | 2 | 1/2 | 1/2 |
+  | 展示了被截断的列表或表格 | 15 | 6 | n/a | 6/6 |
+  | 截断后用 read_page(find/section) | 2 | 2 | 2/2 | 2/2 |
+  | harness 出错 | 1 | 1 | n/a | 0/1 |
+
+  `2026-11-16_learn_c2`：15 个任务，12 个成功。
+
+  | 兜底 | 触发 | 任务 | 恢复 | 任务成功 |
+  |---|---:|---:|---:|---:|
+  | 工具调用失败，错误还给模型 | 3 | 3 | 2/3 | 2/3 |
+  | 展示了被截断的列表或表格 | 20 | 8 | n/a | 6/8 |
+  | 截断后用 read_page(find/section) | 1 | 1 | 1/1 | 0/1 |
+  | harness 出错 | 1 | 1 | n/a | 0/1 |
+
+  两次运行里都没有触发：参数不是 JSON、参数被拒、finish 不合法、催促、单动作跳过、回到
+  稳定 URL、脚本点击、对话框、结果截短、卡住提示、按卡住结束、强制 finish、没有答案、
+  模型接口重试、模型错误/拒绝/花费上限、意外写入。未记录（版本 1）：失败后跳过、换页后
+  跳过、读页面重试、settle 超时、推理降级、最小模式。
+  “任务成功”一列是相关，不是挽救率（见上）。
+- **读这两张表**：这 30 个任务里，绝大多数兜底一次都没触发；被截断的列表出现在 14 个
+  任务里，其中只有 3 个任务的模型去看了被截掉的部分。
+- **放弃**：
+  - 在循环里边跑边计数（那样旧运行重算不了，数字也追溯不到事件）。
+  - 把“任务成功”叫作挽救率（它不是）。
+  - 重写旧运行的 summary 文件（旧运行不覆盖；需要时用脚本另存）。

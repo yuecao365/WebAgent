@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 
-from browser_agent.harness.events import EventLog
+from browser_agent.harness.events import LOG_VERSION, EventLog
 from browser_agent.harness.llm import (
     BudgetExceededError,
     LLMClient,
@@ -134,6 +134,12 @@ AFTER_NAVIGATION = (
     "old page are gone. Look at the page now shown and send the call again if needed."
 )
 BAD_ARGUMENTS = "The arguments were not a JSON object. Send the call again with valid JSON."
+# How the event log names the reason a call was not run.
+_SKIP_REASONS = {
+    EXTRA_CALL: "single_action",
+    AFTER_FAILURE: "after_failure",
+    AFTER_NAVIGATION: "after_navigation",
+}
 
 
 @dataclass(frozen=True)
@@ -222,7 +228,13 @@ class AgentLoop:
         self._started = self._clock()
         self._task = UserMessage(f"Task: {goal}", section="task")
         view = self._executor.view()
-        self._events.append("task_start", goal=goal, url=view.url, budgets=asdict(config.budgets))
+        self._events.append(
+            "task_start",
+            goal=goal,
+            url=view.url,
+            budgets=asdict(config.budgets),
+            log_version=LOG_VERSION,
+        )
 
         last_key: str | None = None
         repeats = 0
@@ -245,7 +257,7 @@ class AgentLoop:
             except BudgetExceededError as exc:
                 return self._end("spend_cap", error=str(exc))
             except ModelError as exc:
-                return self._end("model_error", error=str(exc))
+                return self._model_failed("model_error", exc)
             status, detail = [], None
             if reply.stop_reason == "refusal":
                 return self._end("model_refusal", error="the model declined to continue")
@@ -355,9 +367,20 @@ class AgentLoop:
             cost_usd=completion.cost_usd,
             seconds=round(completion.seconds, 3),
             attempts=completion.attempts,
+            retry_errors=list(completion.retry_errors),
         )
+        for fallback in reply.fallbacks:
+            kind, _, change = fallback.partition(": ")
+            self._events.append("provider_fallback", step=self._steps, fallback=kind, detail=change)
         self._history.append(reply.message())
         return reply
+
+    def _model_failed(self, reason: str, exc: ModelError, forced: bool = False) -> RunResult:
+        """End the task on a model error, leaving how many attempts it took in the log."""
+        self._events.append(
+            "model_error", step=self._steps, attempts=exc.attempts, error=str(exc)[:300]
+        )
+        return self._end(reason, forced=forced, error=str(exc))
 
     def _run_calls(self, calls: Sequence[ToolCall]) -> list[ToolOutcome]:
         """Run the calls of one reply in order and put each result into the history.
@@ -372,7 +395,12 @@ class AgentLoop:
                 skip_reason = EXTRA_CALL
             if skip_reason is not None:
                 self._history.append(ToolMessage(call.id, skip_reason, is_error=True))
-                self._events.append("tool_skipped", step=self._steps, name=call.name)
+                self._events.append(
+                    "tool_skipped",
+                    step=self._steps,
+                    name=call.name,
+                    reason=_SKIP_REASONS[skip_reason],
+                )
                 continue
             outcome = self._run_tool(call)
             outcomes.append(outcome)
@@ -439,7 +467,7 @@ class AgentLoop:
         except BudgetExceededError as exc:
             return self._end(reason, forced=True, error=str(exc))
         except ModelError as exc:
-            return self._end(reason, forced=True, error=str(exc))
+            return self._model_failed(reason, exc, forced=True)
         for call in reply.tool_calls:
             if call.name == FINISH_TOOL.name and call.arguments is not None:
                 outcome = self._run_tool(call)

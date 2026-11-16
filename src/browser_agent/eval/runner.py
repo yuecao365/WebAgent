@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from browser_agent.browser import actions
 from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
 from browser_agent.context.observe import PageRenderer, ViewOptions
+from browser_agent.eval.fallbacks import ledger_markdown, run_ledger
 from browser_agent.eval.webarena import (
     ShoppingAdmin,
     SiteConfig,
@@ -274,6 +275,8 @@ def summary_markdown(
             f"{record['usd']:.4f} | {record['seconds']:.1f} | {record['steps']} | "
             f"{record['finish_reason']} |"
         )
+    if "fallbacks" in summary:
+        lines += ["", "## Fallbacks", "", ledger_markdown(summary["fallbacks"]).rstrip("\n")]
     return "\n".join(lines) + "\n"
 
 
@@ -314,10 +317,12 @@ def run_task(
         env.restore_ui_state()
     scheduler.task_started()
 
+    events = EventLog(trace_dir / "events.jsonl")
+    # From here on the session reports its own fallbacks into this task's log.
+    browser.notify = events.append
     browser.set_extra_headers(env.site.auth_headers)
     actions.goto(browser, task.start_url)
 
-    events = EventLog(trace_dir / "events.jsonl")
     # One renderer per task: it remembers the last page to diff against.
     renderer = PageRenderer(config.switches.view_options())
     loop = AgentLoop(
@@ -328,6 +333,7 @@ def run_task(
             render=renderer.render,
             render_section=renderer.section,
             search=renderer.find,
+            notify=events.append,
         ),
         events=events,
         config=LoopConfig(
@@ -358,6 +364,15 @@ def run_task(
     writes = unexpected_writes(browser.recorder.har()["log"]["entries"])
     scheduler.task_ended(state_changing, wrote=bool(writes))
     score = env.evaluate(task.task_id, response, har_path)
+    # The verdict goes into the log too, so that the log alone can say how a task
+    # with a given fallback ended.
+    events.append(
+        "task_scored",
+        success=score.success,
+        score=score.score,
+        eval_status=score.status,
+        unexpected_writes=0 if state_changing else len(writes),
+    )
     (trace_dir / "eval_result.json").write_text(
         json.dumps(score.detail, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -453,16 +468,21 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
             try:
                 record = run_task(entry, env, session, llm, config, run_dir, scheduler)
             except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                log = run_dir / "traces" / str(entry["task_id"]) / "events.jsonl"
+                EventLog.resume(log).append("harness_error", error=error[:500])
                 record = {
                     "task_id": entry["task_id"], "template_id": entry["template_id"],
                     "split": entry["split"], "task_type": entry["task_type"],
                     "success": False, "score": 0.0, "eval_status": "not_scored",
                     "finish_reason": "harness_error", "forced": False, "answered": False,
                     "steps": 0, "tokens": 0, "usage": {}, "usd": 0.0, "seconds": 0.0,
-                    "reset_seconds": 0.0, "error": f"{type(exc).__name__}: {exc}",
+                    "reset_seconds": 0.0, "error": error,
                     "state_changing": bool(entry.get("state_changing", True)),
                     "did_reset": False, "unexpected_writes": [],
                 }  # fmt: skip
+            finally:
+                session.notify = None
             records.append(record)
             with (run_dir / "records.jsonl").open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -477,6 +497,7 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
                 break
 
     summary = summarize(records)
+    summary["fallbacks"] = run_ledger(run_dir)
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (run_dir / "summary.md").write_text(
         summary_markdown(run_dir.name, llm.model, summary, records), encoding="utf-8"

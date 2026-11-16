@@ -14,7 +14,7 @@ import socket
 import subprocess
 import time
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -140,6 +140,9 @@ class BrowserSession:
         self._ws_url: str | None = None
         self._helpers: Any = None
         self._admin: Any = None
+        # Called as notify(kind, **details) when the session takes a fallback; the
+        # runner points it at the event log of the task in progress.
+        self.notify: Callable[..., Any] | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -251,6 +254,8 @@ class BrowserSession:
                 return
             previous = count
             time.sleep(0.3)
+        if self.notify is not None:
+            self.notify("settle_timeout", seconds=timeout)
 
     def _element_count(self) -> int:
         result = self._bh.cdp(

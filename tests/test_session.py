@@ -67,10 +67,23 @@ def test_settle_gives_up_quietly_when_the_time_is_up(browser, monkeypatch):
     ticks = iter(range(0, 1000, 10))
     monkeypatch.setattr(session_module.time, "monotonic", lambda: next(ticks))
     browser._helpers = Helpers([TimeoutError("busy")], element_counts=[1])
+    reported = []
+    browser.notify = lambda kind, **details: reported.append((kind, details))
 
     browser.settle(timeout=30.0)
 
     assert browser._helpers.calls.count("count") == 0
+    assert reported == [("settle_timeout", {"seconds": 30.0})]
+
+
+def test_a_page_that_settles_reports_nothing(browser):
+    browser._helpers = Helpers([True], element_counts=[2048])
+    reported = []
+    browser.notify = lambda kind, **details: reported.append(kind)
+
+    browser.settle()
+
+    assert reported == []
 
 
 def test_launch_arguments_fence_the_browser_and_keep_its_tab_awake(tmp_path):

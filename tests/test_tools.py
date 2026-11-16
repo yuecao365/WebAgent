@@ -237,19 +237,37 @@ class BusyBrowser(FakeBrowser):
 
 def test_a_busy_page_is_read_again_before_giving_up():
     waits = []
-    tools = executor(BusyBrowser(failures=2), sleep=waits.append)
+    reported = []
+    tools = executor(
+        BusyBrowser(failures=2),
+        sleep=waits.append,
+        notify=lambda kind, **details: reported.append((kind, details)),
+    )
 
     page = tools.view()
 
     assert page.title == "Admin"
     assert waits == [2.0, 4.0]
+    # The retry leaves an event, so the ledger can count it.
+    assert reported == [
+        (
+            "page_read_retry",
+            {"retries": 2, "ok": True, "error": "Accessibility.getFullAXTree failed: timed out"},
+        )
+    ]
 
 
 def test_a_page_that_stays_busy_is_an_error():
-    tools = executor(BusyBrowser(failures=3), sleep=lambda seconds: None)
+    reported = []
+    tools = executor(
+        BusyBrowser(failures=3),
+        sleep=lambda seconds: None,
+        notify=lambda kind, **details: reported.append((kind, details["ok"])),
+    )
 
     with pytest.raises(BrowserError, match="timed out"):
         tools.view()
+    assert reported == [("page_read_retry", False)]
 
 
 def test_read_page_without_a_section_waits_and_reads_again():
