@@ -63,6 +63,8 @@ class Switches(BaseModel):
     diff_observation: bool = False
     # Run every tool call of a reply instead of only the first.
     multi_action: bool = False
+    # Keep every step's page in the history: the "full history" arm of experiments.
+    pages_in_history: bool = False
 
     def view_options(self) -> ViewOptions:
         return ViewOptions(
@@ -326,6 +328,7 @@ def run_task(
         config=LoopConfig(
             budgets=Budgets(**config.budgets.model_dump()),
             multi_action=config.switches.multi_action,
+            pages_in_history=config.switches.pages_in_history,
         ),
     )
     result = loop.run(task.intent)

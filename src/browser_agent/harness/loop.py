@@ -57,6 +57,26 @@ Working
 - Reply with tool calls only. Do not write explanations.
 """
 
+# The same section when every step's page is kept in the conversation.
+_PROMPT_HEAD_WITH_PAGES = """\
+You are a web agent. You complete one task on a website by calling tools, and you \
+end by calling finish.
+
+What you see
+- After every step you get the page as it is then, your working note and the step \
+count. Pages from earlier steps stay above in the conversation; the last message is \
+the current page.
+- The page is an outline of its accessibility tree. Elements you can act on start \
+with a number in brackets, as in `[12] button "Save"`, followed by state such as \
+value, checked or expanded. Indentation shows nesting. The outline covers the whole \
+page, including parts below the visible area.
+- Use the number in brackets as `ref`. Refs come from the latest page; older ones may \
+no longer exist.
+
+Working
+- Reply with tool calls only. Do not write explanations.
+"""
+
 _ONE_CALL = "- Send one tool call per reply.\n"
 _SEVERAL_CALLS = (
     "- You may send several tool calls in one reply when they all act on the page shown "
@@ -95,9 +115,10 @@ For NAVIGATE, the requested page must be the one open when you call finish.
 """
 
 
-def system_prompt(multi_action: bool) -> str:
+def system_prompt(multi_action: bool, pages_in_history: bool = False) -> str:
     """The system prompt. It depends only on run settings, never on the step."""
-    return _PROMPT_HEAD + (_SEVERAL_CALLS if multi_action else _ONE_CALL) + _PROMPT_TAIL
+    head = _PROMPT_HEAD_WITH_PAGES if pages_in_history else _PROMPT_HEAD
+    return head + (_SEVERAL_CALLS if multi_action else _ONE_CALL) + _PROMPT_TAIL
 
 
 NUDGE = "Reply with a tool call. Call finish when the task is done or cannot be done."
@@ -133,6 +154,10 @@ class LoopConfig:
     failure_limit: int = 3
     # Run every tool call of a reply, in order, instead of only the first.
     multi_action: bool = False
+    # Keep every step's page in the history instead of showing only the current one.
+    # This is the behaviour before the cache-friendly layout: the prompt grows by a
+    # whole page per step. It exists as the "full history" arm of experiments.
+    pages_in_history: bool = False
 
 
 @dataclass(frozen=True)
@@ -175,7 +200,7 @@ class AgentLoop:
         self._events = events
         self._config = config or LoopConfig()
         self._clock = clock
-        self._system = system_prompt(self._config.multi_action)
+        self._system = system_prompt(self._config.multi_action, self._config.pages_in_history)
         self._task = UserMessage("", section="task")
         # Append-only: an entry is never changed or removed once it is in.
         self._history: list[Message] = []
@@ -285,6 +310,10 @@ class AgentLoop:
         tail.append(Part("notes", f"Working note:\n{self._note or '(empty)'}"))
         lines = [f"Step {self._steps} of {self._config.budgets.max_steps}.", *status]
         tail.append(Part("status", "\n".join(lines)))
+        if self._config.pages_in_history:
+            # The page becomes part of the history and is sent again at every step.
+            self._history.append(UserMessage(tail))
+            return [self._task, *self._history]
         return [self._task, *self._history, UserMessage(tail)]
 
     # -- pieces of a step --------------------------------------------------

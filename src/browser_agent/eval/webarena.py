@@ -64,6 +64,9 @@ class SiteConfig:
             .strip()
             .rstrip("/")
             or defaults.env_ctrl_url,
+            # A second site next to the first needs its own container name and ports.
+            container=os.environ.get("WEBARENA_SHOPPING_ADMIN_CONTAINER", "").strip()
+            or defaults.container,
         )
 
     @property

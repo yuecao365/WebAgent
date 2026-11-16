@@ -108,6 +108,24 @@ def test_pages_never_enter_the_history(tmp_path):
         assert not any("page p" in text_of(message) for message in before)
 
 
+def test_pages_stay_in_the_history_when_asked_for(tmp_path):
+    """The full-history arm: what the harness did before the cache-friendly layout."""
+    replies = [reply(call("click", ref=n)) for n in range(3)]
+    replies.append(reply(call("finish", **FINISH_OK)))
+    _, provider, _, _, _ = run(tmp_path, replies, config=LoopConfig(pages_in_history=True))
+    requests = [c["messages"] for c in provider.calls]
+
+    # Every earlier page is still there, so the prompt grows by a page per step.
+    assert [sum("page p" in text_of(m) for m in messages) for messages in requests] == [1, 2, 3, 4]
+    assert "page p4" in requests[3][-1].content
+    # Each request is the one before plus the step's call, its result and the new page.
+    for earlier, later in itertools.pairwise(requests):
+        assert later[: len(earlier)] == earlier
+        assert len(later) == len(earlier) + 3
+    assert provider.calls[0]["system"] == system_prompt(False, pages_in_history=True)
+    assert "stay above in the conversation" in provider.calls[0]["system"]
+
+
 def test_system_prompt_and_tools_are_the_same_at_every_step(tmp_path):
     replies = [reply(call("click", ref=n)) for n in range(3)]
     replies.append(reply(call("finish", **FINISH_OK)))
