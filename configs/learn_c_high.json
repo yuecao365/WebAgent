@@ -1,0 +1,12 @@
+{
+  "name": "learn_c_high",
+  "subset": "configs/subset.json",
+  "split": "learn",
+  "budgets": {
+    "max_steps": 45,
+    "max_tokens": 1000000,
+    "max_seconds": 900,
+    "max_usd": 2.0
+  },
+  "reasoning_effort": "high"
+}

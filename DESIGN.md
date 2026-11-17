@@ -183,6 +183,10 @@ Outside this project's scope; ideas that come up are added here, not built:
 - history compaction and the E1 context experiment as first drafted (the defaults
   were chosen on the learn-task arms instead)
 - a "not present" form of `check` in skill code
+- showing the induction call the accessibility tree's own element names, so that
+  more skill code passes verification (found in B3: several candidates named
+  elements as the pruned page text shows them, which the locators could not resolve)
+- repairing skill code that fails a replay
 
 ## 8. Open items
 

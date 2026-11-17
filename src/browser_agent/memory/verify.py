@@ -45,6 +45,7 @@ from browser_agent.memory.pipeline import (
     BuildConfig,
     BuildLog,
     episode_for,
+    read_log,
 )
 from browser_agent.memory.skill import Skill, render_skill_md
 from browser_agent.memory.skill_api import SkillRun, run_skill_code, site_path
@@ -314,7 +315,12 @@ def verify_build(config: BuildConfig, root: Path, llm: LLMClient, build: Path) -
         # A known state to start from, and the saved grid state that restores need.
         env.reset()
         verifier = Verifier(env, session, llm, log, Path(work))
+        # A verification that was interrupted continues where it stopped: a candidate
+        # that already has its verdict in the log is not replayed again.
+        settled = {event["name"] for event in read_log(build) if event["event"] == "verdict"}
         for folder in sorted((build / CANDIDATES).iterdir()):
+            if folder.name in settled:
+                continue
             info = json.loads((folder / "candidate.json").read_text(encoding="utf-8"))
             code_file = folder / "skill.py"
             skill = skills.get(folder.name)
@@ -343,12 +349,17 @@ def verify_build(config: BuildConfig, root: Path, llm: LLMClient, build: Path) -
             log.add("verdict", **asdict(verdict))
         if verifier.dirty:
             env.reset()
+    # Every verdict of the build, including those of an earlier, interrupted pass.
+    everything = [
+        {key: value for key, value in event.items() if key not in ("ts", "event")}
+        for event in read_log(build)
+        if event["event"] == "verdict"
+    ]
     (build / "verification.json").write_text(
-        json.dumps([asdict(verdict) for verdict in verdicts], indent=2, ensure_ascii=False),
-        encoding="utf-8",
+        json.dumps(everything, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     store.write_manifest()
     store.close()
-    kept = sum(verdict.code_kept for verdict in verdicts)
-    log.add("verified", candidates=len(verdicts), code_kept=kept)
+    kept = sum(bool(verdict["code_kept"]) for verdict in everything)
+    log.add("verified", candidates=len(everything), code_kept=kept)
     return verdicts

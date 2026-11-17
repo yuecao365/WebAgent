@@ -1,0 +1,404 @@
+[
+  {
+    "name": "add-order-shipment-tracking",
+    "template_id": 284,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 496,
+      "template_id": 284
+    },
+    "code_kept": false,
+    "why": "no candidate code: the model wrote no code; other_args {\"order\": \"65\", \"service\": \"DHL\", \"tracking\": \"8974568499\"} not used: a held-out task uses 65; first attempt refused: the code carries literal values of the task: Federal Express",
+    "replays": []
+  },
+  {
+    "name": "adjust-current-product-price",
+    "template_id": 247,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 458,
+      "template_id": 247
+    },
+    "code_kept": false,
+    "why": "the original replay failed: the verifier: The product page shows a saved confirmation, but its price is still $27.00 instead of the required reduced price of $22.00.",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "action": "Reduce",
+          "amount": "$5"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 5,
+        "seconds": 13.4,
+        "value": null,
+        "final_path": "/catalog/product/edit/id/1481/set/9/type/simple/store/0/back/edit/",
+        "reproduced": true,
+        "reproduced_how": "the official evaluator scored the replay True",
+        "verifier_passed": false,
+        "verifier_reason": "The product page shows a saved confirmation, but its price is still $27.00 instead of the required reduced price of $22.00."
+      }
+    ]
+  },
+  {
+    "name": "cancel-admin-order",
+    "template_id": 257,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 470,
+      "template_id": 257
+    },
+    "code_kept": false,
+    "why": "the original replay failed: line 14: IndexError: list index out of range",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "id": "302"
+        },
+        "ran": true,
+        "error": "line 14: IndexError: list index out of range",
+        "steps": 5,
+        "seconds": 12.3,
+        "value": null,
+        "final_path": "",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "change-cms-page-title",
+    "template_id": 275,
+    "source": {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 486,
+      "template_id": 275
+    },
+    "code_kept": true,
+    "why": "all 3 replays passed",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "old_heading": "404 Not Found",
+          "heading": "Bruh bro you clicked the wrong page"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 10,
+        "seconds": 22.9,
+        "value": null,
+        "final_path": "/cms/page/edit/page_id/1/back/edit/",
+        "reproduced": true,
+        "reproduced_how": "the official evaluator scored the replay True",
+        "verifier_passed": true,
+        "verifier_reason": "The final CMS page form shows the title “Bruh bro you clicked the wrong page” and the confirmation “You saved the page.”"
+      },
+      {
+        "kind": "other",
+        "args": {
+          "old_heading": "Home Page",
+          "heading": "About us"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 10,
+        "seconds": 22.9,
+        "value": null,
+        "final_path": "/cms/page/edit/page_id/2/back/edit/",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": true,
+        "verifier_reason": "The final page is the CMS page edit form showing the requested title “About us” and the confirmation “You saved the page.”"
+      },
+      {
+        "kind": "other",
+        "args": {
+          "old_heading": "Enable Cookies",
+          "heading": "Customer Service"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 10,
+        "seconds": 24.6,
+        "value": null,
+        "final_path": "/cms/page/edit/page_id/3/back/edit/",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": true,
+        "verifier_reason": "The final edit page shows the requested title “Customer Service” and the confirmation “You saved the page.”"
+      }
+    ]
+  },
+  {
+    "name": "count-all-reviews",
+    "template_id": 248,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 344,
+      "template_id": 248
+    },
+    "code_kept": false,
+    "why": "no candidate code: the model wrote no code",
+    "replays": []
+  },
+  {
+    "name": "count-reviews-by-term",
+    "template_id": 288,
+    "source": {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 11,
+      "template_id": 288
+    },
+    "code_kept": false,
+    "why": "the original replay failed: step 5 type(role='textbox', name='detail', text='disappointed'): no element matches textbox \"detail\"; elements with role textbox are named \"From\", \"To\", \"of 18\", \"\"",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "term": "disappointed"
+        },
+        "ran": true,
+        "error": "step 5 type(role='textbox', name='detail', text='disappointed'): no element matches textbox \"detail\"; elements with role textbox are named \"From\", \"To\", \"of 18\", \"\"",
+        "steps": 5,
+        "seconds": 6.5,
+        "value": null,
+        "final_path": "",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "find-customer-by-phone",
+    "template_id": 364,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 208,
+      "template_id": 364
+    },
+    "code_kept": false,
+    "why": "the original replay failed: the gate rejects it on the task's start page: 2 elements match link \" CUSTOMERS\", where exactly one is needed",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "PhoneNum": "+1 2058812302"
+        },
+        "ran": false,
+        "error": "the gate rejects it on the task's start page: 2 elements match link \" CUSTOMERS\", where exactly one is needed",
+        "steps": 0,
+        "seconds": 0.0,
+        "value": null,
+        "final_path": "",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "get-latest-order-attribute",
+    "template_id": 366,
+    "source": {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 198,
+      "template_id": 366
+    },
+    "code_kept": false,
+    "why": "the original replay failed: it did not reproduce the episode's outcome (returned \"was\"; the agent had answered [\"harrypotterfan1@gmail.com\"])",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "attribute": "customer email",
+          "status": "most recent cancelled"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 8,
+        "seconds": 20.4,
+        "value": "was",
+        "final_path": "/sales/order/view/order_id/136/",
+        "reproduced": false,
+        "reproduced_how": "returned \"was\"; the agent had answered [\"harrypotterfan1@gmail.com\"]",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "monthly-orders-report",
+    "template_id": 270,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 107,
+      "template_id": 270
+    },
+    "code_kept": true,
+    "why": "all 1 replays passed",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "start_date": "05/01/2022",
+          "end_date": "12/31/2022"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 14,
+        "seconds": 15.6,
+        "value": [
+          {
+            "month": "May",
+            "count": 8
+          },
+          {
+            "month": "June",
+            "count": 13
+          },
+          {
+            "month": "July",
+            "count": 9
+          },
+          {
+            "month": "August",
+            "count": 8
+          },
+          {
+            "month": "September",
+            "count": 10
+          },
+          {
+            "month": "October",
+            "count": 4
+          },
+          {
+            "month": "November",
+            "count": 5
+          },
+          {
+            "month": "December",
+            "count": 10
+          }
+        ],
+        "final_path": "/reports/report_sales/sales/filter/cmVwb3J0X3R5cGU9Y3JlYXRlZF9hdF9vcmRlciZwZXJpb2RfdHlwZT1tb250aCZmcm9tPTA1JTJGMDElMkYyMDIyJnRvPTEyJTJGMzElMkYyMDIyJnNob3dfb3JkZXJfc3RhdHVzZXM9MCZzaG93X2VtcHR5X3Jvd3M9MCZzaG93X2FjdHVhbF9jb2x1bW5zPTA=/",
+        "reproduced": true,
+        "reproduced_how": "returned [{\"month\": \"May\", \"count\": 8}, {\"month\": \"June\", \"count\": 13}, {\"month\": \"July\", \"count\": 9}, {\"month\": \"August\", \"count\": 8}, {\"month\": \"September\", \"count\": 10}, {\"month\": \"October\", \"count\": 4}, {\"; the agent had answered [{\"month\": \"May\", \"count\": 8}, {\"month\": \"June\", \"count\": 13}, {\"month\": \"July\", \"count\": 9}, {\"month\": \"August\", \"count\": 8}, {\"month\": \"September\", \"count\": 10}, {\"month\": \"October\", \"count\": 4}, {\"",
+        "verifier_passed": true,
+        "verifier_reason": "The final Orders Report is filtered to Month from 5/1/22 through 12/31/22, and its monthly Orders counts match the returned May–December list."
+      }
+    ]
+  },
+  {
+    "name": "notify-customer-on-pending-order",
+    "template_id": 280,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 492,
+      "template_id": 280
+    },
+    "code_kept": false,
+    "why": "the original replay failed: step 15 check(text='Customer Notified'): check failed: the page does not show \"Customer Notified\"",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "name": "Jane Doe",
+          "message": "sorry we are out of stock, please reorder"
+        },
+        "ran": true,
+        "error": "step 15 check(text='Customer Notified'): check failed: the page does not show \"Customer Notified\"",
+        "steps": 15,
+        "seconds": 32.3,
+        "value": null,
+        "final_path": "",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "show-sales-report",
+    "template_id": 268,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 704,
+      "template_id": 268
+    },
+    "code_kept": true,
+    "why": "all 1 replays passed",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "report": "sales order report",
+          "start_date": "02/01/2023",
+          "end_date": "02/28/2023"
+        },
+        "ran": true,
+        "error": "",
+        "steps": 9,
+        "seconds": 12.7,
+        "value": null,
+        "final_path": "/reports/report_sales/sales/filter/cmVwb3J0X3R5cGU9Y3JlYXRlZF9hdF9vcmRlciZwZXJpb2RfdHlwZT1kYXkmZnJvbT0wMiUyRjAxJTJGMjAyMyZ0bz0wMiUyRjI4JTJGMjAyMyZzaG93X29yZGVyX3N0YXR1c2VzPTAmc2hvd19lbXB0eV9yb3dzPTAmc2hvd19hY3R1YWxfY29sdW1ucz0w/",
+        "reproduced": true,
+        "reproduced_how": "the official evaluator scored the replay True",
+        "verifier_passed": true,
+        "verifier_reason": "The final page is the Orders Report with Order Created and Day selected, the requested February 1–28, 2023 boundaries, and a displayed results table."
+      }
+    ]
+  },
+  {
+    "name": "show-sales-report-date-range",
+    "template_id": 271,
+    "source": {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 709,
+      "template_id": 271
+    },
+    "code_kept": false,
+    "why": "the original replay failed: step 3 click(role='link', name='Orders', section='Sales'): no element matches link \"Orders\" in the section \"Sales\"; link \"Orders\" exists, but not in that row or section",
+    "replays": [
+      {
+        "kind": "original",
+        "args": {
+          "report_type": "orders",
+          "start_date": "May 1, 2021",
+          "end_date": "March 31, 2022"
+        },
+        "ran": true,
+        "error": "step 3 click(role='link', name='Orders', section='Sales'): no element matches link \"Orders\" in the section \"Sales\"; link \"Orders\" exists, but not in that row or section",
+        "steps": 3,
+        "seconds": 2.0,
+        "value": null,
+        "final_path": "",
+        "reproduced": null,
+        "reproduced_how": "",
+        "verifier_passed": null,
+        "verifier_reason": ""
+      }
+    ]
+  },
+  {
+    "name": "total-items-in-recent-complete-orders",
+    "template_id": 1002,
+    "source": {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 128,
+      "template_id": 1002
+    },
+    "code_kept": false,
+    "why": "no candidate code: the model wrote no code",
+    "replays": []
+  }
+]

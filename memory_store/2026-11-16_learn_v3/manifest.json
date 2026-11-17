@@ -1,5 +1,5 @@
 {
-  "written": "2026-11-17T04:33:11+00:00",
+  "written": "2026-11-17T04:52:32+00:00",
   "items": [
     {
       "kind": "skill",
@@ -38,7 +38,7 @@
       "kind": "skill",
       "id": "show-sales-report",
       "version": 1,
-      "status": "active",
+      "status": "retired",
       "created": "2026-11-17T04:26:22+00:00",
       "sha256": "edd65a7d8979be3988137ff5460d32f6c62a7793003597a3fcf206e931492239",
       "files": [
@@ -49,7 +49,7 @@
       "kind": "skill",
       "id": "monthly-orders-report",
       "version": 1,
-      "status": "active",
+      "status": "retired",
       "created": "2026-11-17T04:26:48+00:00",
       "sha256": "997ce4d0220974fe4a279c8c15af1384d2a98edd713a0711219ba651e2272df1",
       "files": [
@@ -71,7 +71,7 @@
       "kind": "skill",
       "id": "change-cms-page-title",
       "version": 1,
-      "status": "active",
+      "status": "retired",
       "created": "2026-11-17T04:27:44+00:00",
       "sha256": "afe1d7e19ccbd8b4e448df0a3aba804c8dbb863567d039bc4149d3ca1364212c",
       "files": [
@@ -639,6 +639,42 @@
       "status": "active",
       "created": "2026-11-17T04:33:11+00:00",
       "sha256": "f6aa1fe2babfa0849b73cb7c2af65ae2caeeda008601d8e5a8e6fd2fd9a6857f"
+    },
+    {
+      "kind": "skill",
+      "id": "change-cms-page-title",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:47:06+00:00",
+      "sha256": "06982c7607086e93909f0823e7e3a13022dd0748c19b0c3709c11a55347f8103",
+      "files": [
+        "SKILL.md",
+        "skill.py"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "monthly-orders-report",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:49:16+00:00",
+      "sha256": "d5d1c13369613bec1a83fc7070eeae8260677404538d073e7e49739076976b02",
+      "files": [
+        "SKILL.md",
+        "skill.py"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "show-sales-report",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:52:25+00:00",
+      "sha256": "845d2ca0201956f97e2fafe09e92be63e312357ad9562896f83d792c17d85fa8",
+      "files": [
+        "SKILL.md",
+        "skill.py"
+      ]
     }
   ]
 }
