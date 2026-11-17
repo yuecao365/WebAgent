@@ -863,3 +863,65 @@
   - 用 `Target.setDiscoverTargets` 的事件代替每步查询（守护进程只留最近 500 个事件，页面
     加载一次就会溢出）。
   - 结果里把 URL 写两遍（`goto(<url>)`）：长 URL 加上行信息会被 500 字符的上限截掉。
+
+## 2026-11-16 每个任务开始前检查浏览器环境；运行开始前检查站点和遥测（A2）
+
+- **为什么按任务而不是按运行**：r3 的问题是一个任务留下的东西带到了后面的任务。只在运行
+  开始时检查发现不了它。
+- **决定**（`browser/environment.py` 的 `prepare`，在任务的第一次观察之前运行）：
+  1. 只有一个标签页，而且是 agent 的。多出来的关掉；agent 自己的标签页没了，修不了。
+  2. 标签页可见（`document.visibilityState == "visible"`）。隐藏的 `Page.bringToFront`。
+     起始页加载前检查一次，加载后再检查一次。
+  3. 站点存储是空的：站点域名下没有 cookie，配额存储（IndexedDB、缓存）用量为 0，
+     localStorage 和 sessionStorage 没有键。有就再清一次（清 cookie +
+     `Storage.clearDataForOrigin`），再查。这一步在打开起始页**之前**做，因为起始页加载
+     时自己会写 cookie。
+  4. 标签页在起始 URL。站点会把起始 URL 重定向（`/admin` → `/admin/admin/dashboard/`），
+     所以判据是：标签页当前文档是“被送去起始 URL”得到的（`Page.getNavigationHistory`
+     里当前条目的 `userTypedURL` 等于起始 URL），并且落在站点的域内。不是就再 goto 一次。
+  - 修好了的问题合成一个 `env_repaired` 事件，`problems` 里写每一项是什么。
+  - 修不好就重启浏览器（`browser_restarted` 事件，带原因和之前已修的问题），在新浏览器
+    上把四项再查一遍。再失败抛 `EnvironmentFault`，该任务记为 `harness_error`，**不运行**
+    （模型一次都不调用，也不评测）。
+  - 账本多两行：`env_repaired`、`browser_restarted`（恢复 = 重启后任务开始了）。
+    `harness_error` 事件里现在也写 `log_version`，因为没开始的任务没有 `task_start`。
+- **怎么读 localStorage**：它只能从站点自己的文档里读，而站点的任何真实页面加载时都会
+  往里写。所以把标签页送到站点下一个不带脚本的地址（`/static/browser-agent-storage-check`，
+  静态文件处理器返回的 404），在那里读两个存储的键数。读之前先去掉登录用的请求头（否则
+  请求会建立会话、产生 cookie），读完由 `prepare` 重新设上；这一次请求从网络记录里清掉，
+  任务的 HAR 仍然从起始 URL 开始（实测如此）。`Storage.getUsageAndQuota` 不反映
+  localStorage（写了 5000 字符仍然报 0），所以不能只靠它。
+- **运行开始前**（`runner.preflight`，在创建结果目录和模型客户端之前）：
+  - `BH_TELEMETRY` 必须是 `0`，否则拒绝启动。原来 runner 是直接把它设成 0；现在改成检查，
+    因为悄悄覆盖会掩盖环境配错了这件事。`.env` 和 `.env.example` 里本来就有
+    `BH_TELEMETRY=0`。`BrowserSession.connect` 仍然在导入 browser-harness 之前把它设成 0，
+    所以别的入口（`scripts/check_env.py`）不受影响。
+  - 站点容器有应答：env-ctrl 的 `/status` 成功，并且 `/admin` 能用请求头登录
+    （`ShoppingAdmin.not_answering()`，只看一次，不等待）。否则拒绝启动。
+- **在真实浏览器上验证**（不调用模型；最后一项用脚本化的假模型走完整的 `run_task`）：
+  - 干净的浏览器：没有事件；`navigation()` 返回
+    `('http://localhost:7780/admin', '.../admin/admin/dashboard/')`；HAR 的第一条是
+    `/admin` 的 302。从商品页开始的任务（237）同样通过。
+  - 留下一个标签页（`Target.createTarget`，agent 的标签页变 hidden）：
+    `env_repaired: 1 extra tab(s) open: http://localhost:7780/admin/sales/order/`，之后可见、
+    在起始页。这就是 r3 的情形。
+  - 留下 cookie、localStorage、sessionStorage：
+    `env_repaired: site data left from before: cookies admin; 1 keys in local storage;
+    1 keys in session storage`。
+  - 关掉 agent 的标签页：`browser_restarted: the agent's tab no longer exists`，重启用了
+    约 5 秒，之后正常。
+  - 整个检查每个任务约多 0.3 秒（一次 404 请求和几次 CDP 调用）。
+- **实测中发现并修掉的一个竞态**：`Target.closeTarget` 返回成功时，这个标签页还在
+  `Target.getTargets` 的列表里。紧接着再查一次会以为“标签页不断打开”，于是白白重启了
+  浏览器。`close_other_tabs` 现在等到被关的标签页从列表里消失再返回（最多 5 秒），有离线
+  测试。A1 提交时还没有这个等待；A1 的路径上每个动作之后只查一次，所以没有表现出来。
+- **放弃**：
+  - 只在运行开始时检查（发现不了任务之间带过去的状态）。
+  - 环境不干净就直接重启浏览器（重启约 5 秒，而且会掩盖是什么不干净；先修、记下来，修
+    不好才重启）。
+  - 浏览器准备不好时照样运行任务（那量的是浏览器，不是 agent）。
+  - 用 `DOMStorage.getDOMStorageItems` 在 `about:blank` 上读 localStorage（没有该站点的
+    frame 时报 “Frame not found”）。
+  - 用 `/robots.txt` 当读存储的地址（它经过 PHP，会种下 `PHPSESSID` cookie）。
+  - 每个任务前无条件记一个“环境已检查”事件（用户要的是出了问题才记；干净时日志和以前
+    一样）。

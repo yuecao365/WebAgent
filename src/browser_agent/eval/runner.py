@@ -23,7 +23,7 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
 
-from browser_agent.browser import actions
+from browser_agent.browser.environment import TaskStart, prepare
 from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
 from browser_agent.context.observe import PageRenderer, ViewOptions
 from browser_agent.eval.fallbacks import ledger_markdown, run_ledger
@@ -33,7 +33,7 @@ from browser_agent.eval.webarena import (
     load_subset,
     unexpected_writes,
 )
-from browser_agent.harness.events import EventLog
+from browser_agent.harness.events import LOG_VERSION, EventLog
 from browser_agent.harness.llm import LLMClient, client_from_env
 from browser_agent.harness.loop import AgentLoop, Budgets, LoopConfig
 from browser_agent.harness.tools import ToolExecutor
@@ -322,8 +322,13 @@ def run_task(
     events = EventLog(trace_dir / "events.jsonl")
     # From here on the session reports its own fallbacks into this task's log.
     browser.notify = events.append
-    browser.set_extra_headers(env.site.auth_headers)
-    actions.goto(browser, task.start_url)
+    # Checks the browser, repairs what the last task left and opens the start page.
+    # If it cannot, it raises and the task is recorded as a harness error, not run.
+    prepare(
+        browser,
+        TaskStart(task.start_url, origin_of(env.site.url), env.site.auth_headers),
+        notify=events.append,
+    )
 
     # One renderer per task: it remembers the last page to diff against.
     renderer = PageRenderer(config.switches.view_options())
@@ -407,6 +412,21 @@ def run_task(
     }
 
 
+def preflight(env: ShoppingAdmin) -> None:
+    """Refuse to start a run when the environment is not ready for one.
+
+    BH_TELEMETRY is checked, not set: a run must not start in an environment that
+    asks browser-harness for telemetry (AGENTS.md), and silently overriding the
+    setting would hide that it was wrong.
+    """
+    problems = []
+    if os.environ.get("BH_TELEMETRY", "").strip() != "0":
+        problems.append("BH_TELEMETRY is not 0 (set BH_TELEMETRY=0 in .env)")
+    problems += env.not_answering()
+    if problems:
+        raise SystemExit("not starting the run: " + "; ".join(problems))
+
+
 def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bool = False) -> Path:
     """Run every selected task and return the run directory.
 
@@ -423,7 +443,8 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
             "the user's go-ahead and the --confirm-paid flag"
         )
     load_dotenv(root / ".env")
-    os.environ["BH_TELEMETRY"] = "0"
+    env = ShoppingAdmin(SiteConfig.from_env())
+    preflight(env)
     results = root / "results"
     llm = client_from_env(
         results,
@@ -432,7 +453,6 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
         api=config.api,
         effort=config.reasoning_effort,
     )
-    env = ShoppingAdmin(SiteConfig.from_env())
     data_dir = Path(os.environ.get("BROWSER_AGENT_DATA_DIR", "").strip() or root / "data")
     browser_path = os.environ.get("BROWSER_PATH", "").strip()
 
@@ -473,7 +493,11 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 log = run_dir / "traces" / str(entry["task_id"]) / "events.jsonl"
-                EventLog.resume(log).append("harness_error", error=error[:500])
+                # The version goes in here too: a task stopped before its loop began
+                # has no task_start to carry it.
+                EventLog.resume(log).append(
+                    "harness_error", error=error[:500], log_version=LOG_VERSION
+                )
                 record = {
                     "task_id": entry["task_id"], "template_id": entry["template_id"],
                     "split": entry["split"], "task_type": entry["task_type"],

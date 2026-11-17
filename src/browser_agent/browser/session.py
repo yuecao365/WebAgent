@@ -40,6 +40,17 @@ _SLOW_CDP_TIMEOUT = 60.0
 # takes the admin site a few seconds. It is given this long to say where it leads.
 _NEW_TAB_URL_WAIT = 10.0
 _NO_ADDRESS = ("", "about:blank")
+# Chrome confirms a close before the tab has left its list of targets.
+_TAB_CLOSE_WAIT = 5.0
+
+# An address under a site that answers with a page running no script (a 404 from the
+# static file handler). Local and session storage can only be read from a document of
+# the site, and any real page of the site would write to them while loading.
+_STORAGE_CHECK_PATH = "/static/browser-agent-storage-check"
+_STORAGE_COUNT_JS = (
+    "JSON.stringify({origin: location.origin, local: localStorage.length, "
+    "session: sessionStorage.length})"
+)
 
 
 class BrowserError(RuntimeError):
@@ -212,6 +223,11 @@ class BrowserSession:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    def restart(self) -> None:
+        """Close this browser and start a new one with the same settings."""
+        self.close()
+        self.start()
+
     # -- Browser protocol --------------------------------------------------
 
     def cdp(self, method: str, **params: Any) -> dict[str, Any]:
@@ -300,8 +316,21 @@ class BrowserSession:
             urls.append(self._address_of(tab["targetId"]))
             with contextlib.suppress(BrowserError):  # it may have closed itself meanwhile
                 self.cdp("Target.closeTarget", targetId=tab["targetId"])
+        self._wait_until_gone({tab["targetId"] for tab in others})
         self.bring_to_front()
         return urls
+
+    def _wait_until_gone(self, closed: set[str]) -> None:
+        """Return once the closed tabs have left the browser's list of targets.
+
+        Without the wait a second look right after the close still finds them, and
+        the check before a task took that for tabs that keep opening.
+        """
+        deadline = time.monotonic() + _TAB_CLOSE_WAIT
+        while any(tab["targetId"] in closed for tab in self._page_targets()):
+            if time.monotonic() >= deadline:
+                raise BrowserError("a tab that was closed is still open")
+            time.sleep(0.05)
 
     def own_tab(self) -> str | None:
         """The target id of the agent's tab, or None when that tab no longer exists."""
@@ -352,12 +381,64 @@ class BrowserSession:
         origins are the sites whose local storage and caches are cleared; pages keep
         UI state there that would otherwise carry over to the next task.
         """
-        self.cdp("Network.clearBrowserCookies")
-        for origin in origins:
-            self.cdp("Storage.clearDataForOrigin", origin=origin, storageTypes="all")
+        self.clear_site_data(origins)
         self.cdp("Page.navigate", url="about:blank")
         if self.recorder is not None:
             self.recorder.clear()
+
+    def clear_site_data(self, origins: Sequence[str]) -> None:
+        """Drop all cookies and everything the pages of these sites stored."""
+        self.cdp("Network.clearBrowserCookies")
+        for origin in origins:
+            self.cdp("Storage.clearDataForOrigin", origin=origin, storageTypes="all")
+
+    def stored_site_data(self, origin: str) -> list[str]:
+        """What the browser still holds for a site, in words; empty when it is clean.
+
+        Looks at cookies, quota-managed storage (IndexedDB, caches), local storage and
+        session storage. To read the last two the tab is sent to a script-free address
+        of the site. The extra headers are dropped first, because the sign-in header
+        would start a session and with it a cookie; the caller sets them again. The
+        request made here is removed from the recorded traffic.
+        """
+        self.set_extra_headers({})
+        result = self.cdp("Page.navigate", url=origin + _STORAGE_CHECK_PATH)
+        if result.get("errorText"):
+            raise BrowserError(f"could not reach {origin} to read its storage")
+        self._guard(lambda: self._bh.wait_for_load(timeout=15.0))
+        evaluated = self.cdp("Runtime.evaluate", expression=_STORAGE_COUNT_JS, returnByValue=True)
+        counts = json.loads(evaluated.get("result", {}).get("value") or "{}")
+        if counts.get("origin") != origin:
+            raise BrowserError(f"could not open a document of {origin} to read its storage")
+
+        found = []
+        host = urlparse(origin).hostname
+        cookies = sorted(
+            cookie.get("name", "")
+            for cookie in self.cdp("Storage.getCookies").get("cookies", [])
+            if cookie.get("domain", "").lstrip(".") == host
+        )
+        if cookies:
+            found.append(f"cookies {', '.join(cookies)}")
+        usage = self.cdp("Storage.getUsageAndQuota", origin=origin).get("usage") or 0
+        if usage:
+            found.append(f"{usage:.0f} bytes of stored data")
+        for name, label in (("local", "local storage"), ("session", "session storage")):
+            if counts.get(name):
+                found.append(f"{counts[name]} keys in {label}")
+        if self.recorder is not None:
+            self.recorder.clear()
+        return found
+
+    def navigation(self) -> tuple[str, str]:
+        """The address the tab was sent to and the address it is at now.
+
+        They differ when the site redirects, as the admin root does to the dashboard.
+        """
+        history = self.cdp("Page.getNavigationHistory")
+        entries = history.get("entries") or [{}]
+        entry = entries[history.get("currentIndex", len(entries) - 1)]
+        return entry.get("userTypedURL", ""), entry.get("url", "")
 
     # -- internals ---------------------------------------------------------
 

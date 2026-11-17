@@ -102,6 +102,8 @@ KINDS: tuple[Kind, ...] = (
     Kind("spend_cap", "Task ended by the spend cap"),
     # -- the run ------------------------------------------------------------------
     Kind("unexpected_write", "Read-only task wrote; next task reset first", None, 2),
+    Kind("env_repaired", "Browser not clean before the task, repaired", None, 3),
+    Kind("browser_restarted", "Browser restarted before the task", "the task then ran", 3),
     Kind("harness_error", "Harness error ended the task"),
 )
 
@@ -193,6 +195,7 @@ def task_fallbacks(events: Sequence[dict[str, Any]]) -> list[Fired]:
     end = next((event for event in events if event["type"] == "task_end"), None)
     answered = end is not None and end.get("response") is not None
     ended_stuck = end is not None and end.get("reason") == "stuck"
+    started = any(event["type"] == "task_start" for event in events)
 
     for position, step in enumerate(steps):
         following = steps[position + 1] if position + 1 < len(steps) else None
@@ -261,6 +264,10 @@ def task_fallbacks(events: Sequence[dict[str, Any]]) -> list[Fired]:
                 add("settle_timeout")
             elif kind == "new_tab":
                 add("new_tab", next_ok)
+            elif kind == "env_repaired":
+                add("env_repaired")
+            elif kind == "browser_restarted":
+                add("browser_restarted", started)
             elif kind == "provider_fallback":
                 if event.get("fallback") in _BY_KEY:
                     add(event["fallback"])

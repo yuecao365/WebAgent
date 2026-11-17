@@ -12,7 +12,9 @@ from browser_agent.eval import runner
 from browser_agent.eval.fallbacks import TaskLog, build_ledger
 from browser_agent.eval.runner import RunConfig, new_run_dir, select_tasks, summarize
 from browser_agent.eval.webarena import ShoppingAdmin, SiteConfig, SiteError
-from browser_agent.harness.events import EventLog
+from browser_agent.harness.events import LOG_VERSION, EventLog, read_events
+
+from fakes import FINISH_OK, FakeSession, FakeSite, call, make_client, reply
 
 
 def write_subset(root, count=8):
@@ -79,6 +81,7 @@ def test_a_config_can_pick_the_api_and_the_reasoning_effort(tmp_path, monkeypatc
         raise SystemExit("stop before any call")
 
     monkeypatch.setattr(runner, "client_from_env", fake_client)
+    monkeypatch.setattr(runner, "preflight", lambda env: None)
     config = RunConfig(name="x", api="responses", reasoning_effort="low")
 
     with pytest.raises(SystemExit, match="stop before any call"):
@@ -377,3 +380,115 @@ def test_summary_markdown_ends_with_the_fallback_ledger():
     assert "## Fallbacks" in text
     assert "| Reply without a tool call, nudged | 1 | 1 | 0/1 | 1/1 |" in text
     assert "a correlation, not a rescue rate" in text
+
+
+def test_the_site_is_asked_once_whether_it_answers(monkeypatch):
+    env = ShoppingAdmin(
+        SiteConfig(url="http://localhost:7780", env_ctrl_url="http://localhost:7781")
+    )
+    monkeypatch.setattr(env, "_healthy", lambda: False)
+    monkeypatch.setattr(env, "_signs_in", lambda: False)
+
+    problems = env.not_answering()
+
+    assert len(problems) == 2
+    assert "http://localhost:7781" in problems[0]
+    assert "http://localhost:7780/admin" in problems[1]
+    monkeypatch.setattr(env, "_healthy", lambda: True)
+    monkeypatch.setattr(env, "_signs_in", lambda: True)
+    assert env.not_answering() == []
+
+
+@pytest.mark.parametrize("value", [None, "", "1", "true"])
+def test_a_run_refuses_to_start_unless_telemetry_is_off(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("BH_TELEMETRY", raising=False)
+    else:
+        monkeypatch.setenv("BH_TELEMETRY", value)
+
+    with pytest.raises(SystemExit, match="BH_TELEMETRY is not 0"):
+        runner.preflight(FakeSite())
+
+
+def test_a_run_refuses_to_start_when_the_site_does_not_answer(monkeypatch):
+    monkeypatch.setenv("BH_TELEMETRY", "0")
+    site = FakeSite()
+    runner.preflight(site)  # up: no objection
+
+    site.answering = ["the control service of shop does not answer at http://localhost:7781"]
+
+    with pytest.raises(SystemExit, match="not starting the run: the control service"):
+        runner.preflight(site)
+
+
+def test_a_refused_run_leaves_nothing_behind(tmp_path, monkeypatch):
+    write_subset(tmp_path, count=1)
+    monkeypatch.setenv("BH_TELEMETRY", "1")
+    monkeypatch.setattr(runner, "ShoppingAdmin", lambda site: FakeSite())
+
+    with pytest.raises(SystemExit, match="not starting the run"):
+        runner.run(RunConfig(name="x"), tmp_path)
+
+    assert not (tmp_path / "results").exists()
+
+
+def run_one_task(tmp_path, monkeypatch, session, replies):
+    """runner.run on one task, with the site, the browser and the model faked."""
+    write_subset(tmp_path, count=1)
+    site = FakeSite()
+    llm, provider, _, _ = make_client(tmp_path, replies)
+    monkeypatch.setenv("BH_TELEMETRY", "0")
+    monkeypatch.setattr(runner, "ShoppingAdmin", lambda config: site)
+    monkeypatch.setattr(runner, "BrowserSession", lambda config: session)
+    monkeypatch.setattr(runner, "client_from_env", lambda results, **kwargs: llm)
+    run_dir = runner.run(RunConfig(name="x"), tmp_path)
+    record = json.loads((run_dir / "records.jsonl").read_text(encoding="utf-8"))
+    events = read_events(run_dir / "traces" / "100" / "events.jsonl")
+    return record, events, provider, site, json.loads((run_dir / "summary.json").read_text())
+
+
+def test_a_task_runs_after_the_browser_was_checked(tmp_path, monkeypatch):
+    session = FakeSession()
+    # The task before left a tab open; it is repaired and the task runs normally.
+    session.other_tabs = ["http://site.test/admin/catalog/product/edit/id/7/"]
+    session.visible = False
+
+    record, events, _, site, summary = run_one_task(
+        tmp_path, monkeypatch, session, [reply(call("finish", **FINISH_OK))]
+    )
+
+    assert record["success"]
+    assert record["finish_reason"] == "finished"
+    kinds = [event["type"] for event in events]
+    # The check comes before the task's first observation.
+    assert kinds.index("env_repaired") < kinds.index("observation")
+    assert session.other_tabs == []
+    assert session.url == "http://site.test/admin"
+    assert session.headers == site.site.auth_headers
+    row = summary["fallbacks"]["rows"]["env_repaired"]
+    assert (row["triggers"], row["tasks"], row["logged"]) == (1, 1, True)
+
+
+def test_a_task_whose_browser_cannot_be_prepared_is_a_harness_error_and_is_not_run(
+    tmp_path, monkeypatch
+):
+    session = FakeSession()
+    session.own = None
+    session.restart_repairs = False
+
+    record, events, provider, site, summary = run_one_task(tmp_path, monkeypatch, session, [])
+
+    assert record["finish_reason"] == "harness_error"
+    assert not record["success"]
+    assert (record["steps"], record["tokens"], record["usd"]) == (0, 0, 0.0)
+    assert "also after a restart" in record["error"]
+    # Not run: the model was never called and nothing was scored.
+    assert provider.calls == []
+    assert site.scored == []
+    assert [event["type"] for event in events] == ["browser_restarted", "harness_error"]
+    assert events[-1]["log_version"] == LOG_VERSION
+    rows = summary["fallbacks"]["rows"]
+    assert rows["harness_error"]["triggers"] == 1
+    assert (rows["browser_restarted"]["triggers"], rows["browser_restarted"]["recovered"]) == (1, 0)
+    # The log says which version it is although the task never started.
+    assert rows["new_tab"]["logged"]

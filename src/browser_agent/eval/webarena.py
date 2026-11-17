@@ -201,6 +201,22 @@ class ShoppingAdmin:
             self._sleep(2.0)
         raise SiteError(f"{self.site.url} was not ready after {timeout:.0f}s")
 
+    def not_answering(self) -> list[str]:
+        """What does not answer right now, in words; empty when the site is up.
+
+        One look, no waiting: a run should not start against a site that is down or
+        in the middle of a reset.
+        """
+        problems = []
+        if not self._healthy():
+            problems.append(
+                f"the control service of {self.site.container} does not answer at "
+                f"{self.site.env_ctrl_url}"
+            )
+        if not self._signs_in():
+            problems.append(f"the site does not sign the admin in at {self.site.admin_url}")
+        return problems
+
     def _healthy(self) -> bool:
         try:
             with urllib.request.urlopen(f"{self.site.env_ctrl_url}/status", timeout=10) as resp:

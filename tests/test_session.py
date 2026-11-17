@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -114,7 +115,10 @@ def test_origin_of():
 class TabHelpers:
     """Stands in for browser_harness.helpers: a browser with tabs and other targets."""
 
-    def __init__(self, targets, own="AGENT", late=None):
+    def __init__(self, targets, own="AGENT", late=None, slow_close=0):
+        # How many looks at the targets a closed tab stays listed for.
+        self.slow_close = slow_close
+        self.closing = []
         self.targets = list(targets)
         self.own = own
         # target id -> how many times it is asked before it has an address
@@ -130,6 +134,11 @@ class TabHelpers:
         params.pop("_response_timeout", None)
         self.calls.append((method, params))
         if method == "Target.getTargets":
+            if self.closing and self.slow_close > 0:
+                self.slow_close -= 1
+            elif self.closing:
+                self.targets = [t for t in self.targets if t["targetId"] not in self.closing]
+                self.closing = []
             return {"targetInfos": list(self.targets)}
         if method == "Target.getTargetInfo":
             target = next(t for t in self.targets if t["targetId"] == params["targetId"])
@@ -138,7 +147,8 @@ class TabHelpers:
                 return {"targetInfo": {**target, "url": ""}}
             return {"targetInfo": target}
         if method == "Target.closeTarget":
-            self.targets = [t for t in self.targets if t["targetId"] != params["targetId"]]
+            self.closing.append(params["targetId"])
+            return {"success": True}
         return {}
 
     def methods(self):
@@ -163,6 +173,26 @@ def test_tabs_other_than_the_agents_are_closed_and_the_agents_is_brought_to_fron
     # Only the new tab went: not the agent's, and not the extension worker.
     assert browser._helpers.targets == [WORKER, AGENT_TAB]
     assert browser._helpers.methods()[-1] == "Page.bringToFront"
+
+
+def test_a_closed_tab_is_waited_for_until_it_has_left_the_list(browser):
+    """Chrome confirms the close first; a look right after it would still find the tab."""
+    opened = tab("NEW", "http://site.test/admin/sales/order/")
+    browser._helpers = TabHelpers([AGENT_TAB, opened], slow_close=3)
+
+    assert browser.close_other_tabs() == ["http://site.test/admin/sales/order/"]
+    # A second look finds nothing left to close.
+    assert browser.close_other_tabs() == []
+    assert browser._helpers.methods().count("Target.closeTarget") == 1
+
+
+def test_a_tab_that_will_not_close_is_an_error(browser, monkeypatch):
+    ticks = iter(range(0, 1000, 2))
+    monkeypatch.setattr(session_module.time, "monotonic", lambda: next(ticks))
+    browser._helpers = TabHelpers([AGENT_TAB, tab("NEW", "http://site.test/x")], slow_close=99)
+
+    with pytest.raises(BrowserError, match="still open"):
+        browser.close_other_tabs()
 
 
 def test_a_tab_that_has_just_opened_is_given_time_to_say_where_it_leads(browser):
@@ -210,3 +240,119 @@ def test_visibility_is_read_from_the_page(browser):
     browser._helpers = Page()
 
     assert not browser.is_visible()
+
+
+class SiteHelpers:
+    """Stands in for browser_harness.helpers: a browser holding data for a site."""
+
+    def __init__(self, cookies=(), usage=0, local=0, session=0, lands_on="http://site.test"):
+        self.cookies = list(cookies)
+        self.usage, self.local, self.session = usage, local, session
+        self.lands_on = lands_on
+        self.calls = []
+
+    def wait_for_load(self, timeout):
+        return True
+
+    def cdp(self, method, **params):
+        params.pop("_response_timeout", None)
+        self.calls.append((method, params))
+        if method == "Storage.getCookies":
+            return {"cookies": self.cookies}
+        if method == "Storage.getUsageAndQuota":
+            return {"usage": self.usage}
+        if method == "Runtime.evaluate":
+            counts = {"origin": self.lands_on, "local": self.local, "session": self.session}
+            return {"result": {"value": json.dumps(counts)}}
+        if method == "Network.clearBrowserCookies":
+            self.cookies = []
+        if method == "Storage.clearDataForOrigin":
+            self.usage = self.local = self.session = 0
+        if method == "Page.getNavigationHistory":
+            return {
+                "currentIndex": 1,
+                "entries": [
+                    {"url": "about:blank", "userTypedURL": "about:blank"},
+                    {
+                        "url": "http://site.test/admin/admin/dashboard/",
+                        "userTypedURL": "http://site.test/admin",
+                    },
+                ],
+            }
+        return {}
+
+
+class Recorder:
+    cleared = 0
+
+    def clear(self):
+        self.cleared += 1
+
+
+def test_a_clean_browser_holds_nothing_for_the_site(browser):
+    browser._helpers = SiteHelpers(cookies=[{"name": "sid", "domain": "other.test"}])
+    browser.recorder = Recorder()
+
+    assert browser.stored_site_data("http://site.test") == []
+    # The storage is read from a script-free address of the site, without the sign-in
+    # header, and that request does not stay in the task's network trace.
+    calls = browser._helpers.calls
+    assert calls[0] == ("Network.setExtraHTTPHeaders", {"headers": {}})
+    assert calls[1] == (
+        "Page.navigate",
+        {"url": "http://site.test/static/browser-agent-storage-check"},
+    )
+    assert browser.recorder.cleared == 1
+
+
+def test_what_the_browser_still_holds_for_the_site_is_named(browser):
+    browser._helpers = SiteHelpers(
+        cookies=[
+            {"name": "admin", "domain": "site.test"},
+            {"name": "PHPSESSID", "domain": ".site.test"},
+        ],
+        usage=2048,
+        local=3,
+        session=1,
+    )
+
+    assert browser.stored_site_data("http://site.test") == [
+        "cookies PHPSESSID, admin",
+        "2048 bytes of stored data",
+        "3 keys in local storage",
+        "1 keys in session storage",
+    ]
+
+    browser.clear_site_data(["http://site.test"])
+
+    assert browser.stored_site_data("http://site.test") == []
+    assert (
+        "Storage.clearDataForOrigin",
+        {"origin": "http://site.test", "storageTypes": "all"},
+    ) in browser._helpers.calls
+
+
+def test_storage_that_cannot_be_read_is_an_error_not_a_clean_result(browser):
+    browser._helpers = SiteHelpers(lands_on="null")
+
+    with pytest.raises(BrowserError, match="read its storage"):
+        browser.stored_site_data("http://site.test")
+
+
+def test_navigation_tells_the_address_asked_for_from_the_address_reached(browser):
+    browser._helpers = SiteHelpers()
+
+    assert browser.navigation() == (
+        "http://site.test/admin",
+        "http://site.test/admin/admin/dashboard/",
+    )
+
+
+def test_restart_closes_the_browser_and_starts_a_new_one(browser, monkeypatch):
+    order = []
+    monkeypatch.setattr(browser, "close", lambda: order.append("close"))
+    monkeypatch.setattr(browser, "start", lambda: order.append("start"))
+
+    browser.restart()
+
+    assert order == ["close", "start"]

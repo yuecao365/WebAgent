@@ -277,6 +277,21 @@ def test_a_log_older_than_a_kind_reports_it_as_not_logged_not_as_zero(tmp_path):
     assert "New tab opened by an action, closed" in not_logged
 
 
+def test_the_check_before_a_task_leaves_its_repairs_and_restarts_in_the_ledger(tmp_path):
+    ran = events_of(tmp_path, [FINISH])
+    log = EventLog()
+    log.append("env_repaired", problems=["1 extra tab(s) open: about:blank"])
+    log.append("browser_restarted", reason="the agent's tab stays hidden", problems=[])
+    log.events += ran
+    never_started = EventLog()
+    never_started.append("browser_restarted", reason="the agent's tab no longer exists")
+    never_started.append("harness_error", error="EnvironmentFault: ...", log_version=3)
+
+    assert fired(log.events) == [("env_repaired", None), ("browser_restarted", True)]
+    assert fired(never_started.events) == [("browser_restarted", False), ("harness_error", None)]
+    assert log_version(never_started.events) == 3
+
+
 def test_a_saved_version_1_log_of_a_task_the_harness_could_not_finish():
     events = read_events(FIXTURES / "events_v1_harness_error.jsonl")
 
