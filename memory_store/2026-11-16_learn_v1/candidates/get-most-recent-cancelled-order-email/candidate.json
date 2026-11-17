@@ -1,0 +1,18 @@
+{
+  "template_id": 366,
+  "source": {
+    "run": "2026-11-16_learn_c2",
+    "task_id": 198,
+    "template_id": 366
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {},
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "first attempt refused: skill.py of get-most-recent-cancelled-order-email is not allowed: line 19: Break is not allowed in a skill"
+  ],
+  "attempts": 2
+}

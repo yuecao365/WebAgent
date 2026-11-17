@@ -60,7 +60,7 @@ def test_a_plain_task_fires_nothing(tmp_path):
     events = events_of(tmp_path, [reply(call("click", ref=1)), FINISH])
 
     assert fired(events) == []
-    assert log_version(events) == 3
+    assert log_version(events) == 4
 
 
 def test_a_nudge_is_recovered_when_the_next_step_calls_a_tool(tmp_path):

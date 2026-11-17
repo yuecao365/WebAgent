@@ -361,6 +361,8 @@ class FakeSite:
         self.start_urls: dict[int, str] = {}
         self.answering: list[str] = []
         self.site_resets = 0
+        # What the evaluator says of every answer.
+        self.evaluation = True
         self.scored: list[tuple[int, dict[str, Any]]] = []
 
     def task(self, task_id: int) -> Any:
@@ -379,8 +381,33 @@ class FakeSite:
 
     def evaluate(self, task_id: int, response: dict[str, Any], har_path: Path) -> Any:
         self.scored.append((task_id, response))
-        return self._score(True, 1.0, "success", {"score": 1.0})
+        score = 1.0 if self.evaluation else 0.0
+        return self._score(self.evaluation, score, "scored", {"score": score})
 
 
 def load_fixture(name: str) -> Any:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+# -- a small shop: three pages saved from the local site ----------------------
+
+SHOP_BASE = "http://site.test/admin"
+SHOP_GRID = f"{SHOP_BASE}/sales/order/"
+SHOP_ORDER = f"{SHOP_BASE}/sales/order/view/order_id/299/"
+SHOP_REPORT = f"{SHOP_BASE}/reports/report_sales/sales/"
+# The "View" link of order 000000299 in the saved grid.
+SHOP_VIEW_299 = 1842
+
+
+def shop_browser(session: bool = False) -> Any:
+    """A fake browser on the order grid; "View" of order 299 leads to its page."""
+    browser = FakeSession() if session else FakeBrowser()
+    browser.pages = {
+        SHOP_GRID: load_fixture("ax_orders_grid.json"),
+        SHOP_ORDER: load_fixture("ax_order_view.json"),
+        SHOP_REPORT: load_fixture("ax_sales_report.json"),
+    }
+    browser.url = SHOP_GRID
+    browser.element(SHOP_VIEW_299, tag="a")
+    browser.links[SHOP_VIEW_299] = SHOP_ORDER
+    return browser

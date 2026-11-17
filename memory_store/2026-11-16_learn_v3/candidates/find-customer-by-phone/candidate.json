@@ -1,0 +1,27 @@
+{
+  "template_id": 364,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 208,
+    "template_id": 364
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "PhoneNum": "+1 2058812302"
+  },
+  "param_slots": {
+    "PhoneNum": "PhoneNum"
+  },
+  "other_args": [
+    {
+      "PhoneNum": "6025551212"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"PhoneNum\": \"2065555555\"} not used: a held-out task uses 2065555555"
+  ],
+  "attempts": 1
+}

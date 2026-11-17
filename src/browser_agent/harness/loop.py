@@ -37,6 +37,7 @@ from browser_agent.harness.tools import (
     PageView,
     ToolExecutor,
     ToolOutcome,
+    ToolSpec,
 )
 
 _PROMPT_HEAD = """\
@@ -147,6 +148,9 @@ CHECK_REQUEST = (
     "preferably with read_page and find, or on a report page, not from memory.\n"
     "The next finish ends the task, with the answer you give then."
 )
+LESSONS_HEAD = "Lessons from earlier failed attempts on pages like this one:"
+# Given a page's address, the lessons to show there: (id with version, text).
+LessonsAt = Callable[[str], Sequence[tuple[str, str]]]
 # How the event log names the reason a call was not run.
 _SKIP_REASONS = {
     EXTRA_CALL: "single_action",
@@ -185,6 +189,14 @@ class LoopConfig:
     # Hold back the first finish of a task once and ask the model to check its answer
     # against the page. The second finish ends the task as it is.
     verify_before_finish: bool = False
+    # The tools offered to the model. Memory adds two; without it this is TOOLS.
+    tools: tuple[ToolSpec, ...] = TOOLS
+    # Long-term memory. The prefix (skills and site facts) is one message in front of
+    # the task, the same for every step of every task of a run, so it stays in the
+    # cached part of the prompt. Lessons depend on the page and go into the tail.
+    # Both are absent unless a run config switches memory on.
+    memory_prefix: str | None = None
+    lessons_at: LessonsAt | None = None
 
 
 @dataclass(frozen=True)
@@ -229,6 +241,9 @@ class AgentLoop:
         self._clock = clock
         self._system = system_prompt(self._config.multi_action, self._config.pages_in_history)
         self._task = UserMessage("", section="task")
+        prefix = self._config.memory_prefix
+        self._memory = [UserMessage(prefix, section="memory")] if prefix else []
+        self._lessons_logged: set[str] = set()
         # Append-only: an entry is never changed or removed once it is in.
         self._history: list[Message] = []
         self._note = ""
@@ -342,14 +357,29 @@ class AgentLoop:
         tail = [Part("observation", f"Current page:\n{view.text}")]
         if detail is not None:
             tail.append(Part("observation", f"Detail you asked for:\n{detail}"))
+        lessons = self._lessons(view)
+        if lessons:
+            listed = "\n".join(f"- {text}" for _, text in lessons)
+            tail.append(Part("lessons", f"{LESSONS_HEAD}\n{listed}"))
         tail.append(Part("notes", f"Working note:\n{self._note or EMPTY_NOTE}"))
         lines = [f"Step {self._steps} of {self._config.budgets.max_steps}.", *status]
         tail.append(Part("status", "\n".join(lines)))
         if self._config.pages_in_history:
             # The page becomes part of the history and is sent again at every step.
             self._history.append(UserMessage(tail))
-            return [self._task, *self._history]
-        return [self._task, *self._history, UserMessage(tail)]
+            return [*self._memory, self._task, *self._history]
+        return [*self._memory, self._task, *self._history, UserMessage(tail)]
+
+    def _lessons(self, view: PageView) -> Sequence[tuple[str, str]]:
+        """The lessons for the page shown; each is logged the first time it appears."""
+        if self._config.lessons_at is None:
+            return ()
+        lessons = self._config.lessons_at(view.url)
+        for label, _ in lessons:
+            if label not in self._lessons_logged:
+                self._lessons_logged.add(label)
+                self._events.append("lesson_shown", step=self._steps, lesson=label, url=view.url)
+        return lessons
 
     # -- pieces of a step --------------------------------------------------
 
@@ -366,7 +396,9 @@ class AgentLoop:
             note=self._note,
             status=list(status),
         )
-        completion = self._llm.complete(self._system, self._messages(view, status, detail), TOOLS)
+        completion = self._llm.complete(
+            self._system, self._messages(view, status, detail), self._config.tools
+        )
         reply = completion.reply
         self._usage = self._usage + reply.usage
         self._cost += completion.cost_usd

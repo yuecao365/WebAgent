@@ -1,0 +1,193 @@
+{
+  "created": "2026-11-17T04:24:32+00:00",
+  "name": "learn_v3",
+  "config": {
+    "name": "learn_v3",
+    "runs": [
+      "2026-11-16_learn_b2",
+      "2026-11-16_learn_c2",
+      "2026-11-16_learn_check_off",
+      "2026-11-16_learn_check_on"
+    ],
+    "subset": "configs/subset.json",
+    "split": "learn",
+    "model": null,
+    "price_input_per_mtok": null,
+    "price_output_per_mtok": null,
+    "reasoning_effort": "medium",
+    "max_output_tokens": 12000
+  },
+  "model": "gpt-6-luna",
+  "code_commit": "641e469",
+  "source_runs": [
+    "2026-11-16_learn_b2",
+    "2026-11-16_learn_c2",
+    "2026-11-16_learn_check_off",
+    "2026-11-16_learn_check_on"
+  ],
+  "learn_tasks": [
+    11,
+    107,
+    128,
+    198,
+    208,
+    213,
+    344,
+    458,
+    470,
+    486,
+    492,
+    496,
+    704,
+    709,
+    772
+  ],
+  "skill_and_fact_sources": [
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 458,
+      "template_id": 247
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 344,
+      "template_id": 248
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 470,
+      "template_id": 257
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 704,
+      "template_id": 268
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 107,
+      "template_id": 270
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 709,
+      "template_id": 271
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 486,
+      "template_id": 275
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 492,
+      "template_id": 280
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 496,
+      "template_id": 284
+    },
+    {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 11,
+      "template_id": 288
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 208,
+      "template_id": 364
+    },
+    {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 198,
+      "template_id": 366
+    },
+    {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 128,
+      "template_id": 1002
+    }
+  ],
+  "lesson_sources": [
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 213,
+      "template_id": 249
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 772,
+      "template_id": 246
+    },
+    {
+      "run": "2026-11-16_learn_b2",
+      "task_id": 486,
+      "template_id": 275
+    },
+    {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 213,
+      "template_id": 249
+    },
+    {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 107,
+      "template_id": 270
+    },
+    {
+      "run": "2026-11-16_learn_c2",
+      "task_id": 772,
+      "template_id": 246
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 213,
+      "template_id": 249
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 107,
+      "template_id": 270
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 128,
+      "template_id": 1002
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 772,
+      "template_id": 246
+    },
+    {
+      "run": "2026-11-16_learn_check_off",
+      "task_id": 470,
+      "template_id": 257
+    },
+    {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 213,
+      "template_id": 249
+    },
+    {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 107,
+      "template_id": 270
+    },
+    {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 772,
+      "template_id": 246
+    },
+    {
+      "run": "2026-11-16_learn_check_on",
+      "task_id": 496,
+      "template_id": 284
+    }
+  ],
+  "templates_without_a_successful_episode": [
+    246,
+    249
+  ]
+}

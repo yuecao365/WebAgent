@@ -1,0 +1,19 @@
+{
+  "template_id": 268,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 704,
+    "template_id": 268
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "from_date": "02/01/2023",
+    "to_date": "02/28/2023"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

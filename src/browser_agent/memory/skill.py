@@ -258,8 +258,13 @@ def load_skill(folder: Path) -> Skill:
     if not path.is_file():
         raise SkillFormatError(f"{folder} has no {SKILL_FILE}")
     meta, body = parse_skill_md(path.read_text(encoding="utf-8"))
-    if meta.name != folder.name and not folder.name.startswith(f"{meta.name}@"):
-        raise SkillFormatError(f"the folder {folder.name} holds a skill named {meta.name}")
+    # Either skills/<name>/ or, in a memory build, skills/<name>/v<version>/.
+    versioned = folder.name == f"v{meta.version}" and folder.parent.name == meta.name
+    if folder.name != meta.name and not versioned:
+        raise SkillFormatError(
+            f"the folder {folder.parent.name}/{folder.name} holds skill {meta.name} "
+            f"version {meta.version}"
+        )
     code_path = folder / CODE_FILE
     code = code_path.read_text(encoding="utf-8") if code_path.is_file() else None
     skill = Skill(meta, body, code)

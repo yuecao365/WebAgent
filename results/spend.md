@@ -19,5 +19,8 @@
 | 2026-11-16_baseline_test_r2 | 377 | 1400828 | 9909 | 0.1315 |
 | 2026-11-16_baseline_test_r3 | 180 | 538800 | 4981 | 0.0454 |
 | 2026-11-16_baseline_test_r3b | 382 | 1477695 | 10489 | 0.1407 |
+| memory_build_learn_v1 | 31 | 233496 | 37512 | 0.0472 |
+| memory_build_learn_v2 | 4 | 28242 | 6306 | 0.0067 |
+| memory_build_learn_v3 | 47 | 472635 | 47854 | 0.0822 |
 
-Total: $0.9496 of the $5.00 cap.
+Total: $1.0857 of the $5.00 cap.

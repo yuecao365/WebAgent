@@ -1,0 +1,13 @@
+def run(order_id, carrier, tracking_number):
+    goto("/sales/order/view/order_id/" + order_id + "/")
+    check(url="^/sales/order/view/order_id/")
+    click(role="button", name="Ship")
+    check(role="heading", name="New Shipment")
+    click(role="button", name="Add Tracking Number")
+    check(role="combobox", name="Carrier")
+    select(role="combobox", name="Carrier", option=carrier)
+    check(text=carrier)
+    type(role="textbox", name="Number", text=tracking_number)
+    check(role="textbox", name="Number")
+    click(role="button", name="Submit Shipment")
+    check(text="The shipment has been created.")

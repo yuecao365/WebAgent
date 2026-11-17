@@ -1,0 +1,27 @@
+{
+  "template_id": 366,
+  "source": {
+    "run": "2026-11-16_learn_c2",
+    "task_id": 198,
+    "template_id": 366
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "attribute": "customer email",
+    "status": "most recent cancelled"
+  },
+  "param_slots": {
+    "attribute": "attribute",
+    "status": "status"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"attribute\": \"customer email\", \"status\": \"most recent pending\"} not used: not shown on the episode's pages: customer email, most recent pending",
+    "other_args {\"attribute\": \"customer email\", \"status\": \"most recent complete\"} not used: not shown on the episode's pages: customer email, most recent complete",
+    "first attempt refused: skill.py of get-latest-order-attribute is not allowed: line 28: range takes constants up to 200, or len(...)"
+  ],
+  "attempts": 2
+}

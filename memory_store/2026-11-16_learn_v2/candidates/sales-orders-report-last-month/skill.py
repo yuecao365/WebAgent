@@ -1,0 +1,10 @@
+def run(from_date, to_date):
+    goto("/reports/report_sales/sales/")
+    check(url="^/reports/report_sales/sales/")
+    check(role="heading", name="Orders Report")
+    type(role="textbox", name="From *", text=from_date)
+    check(role="textbox", name="From *")
+    type(role="textbox", name="To *", text=to_date)
+    check(role="textbox", name="To *")
+    click(role="button", name="Show Report")
+    check(url="^/reports/report_sales/sales/filter/")

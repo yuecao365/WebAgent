@@ -12,16 +12,21 @@ with that says that later runs are no longer comparable with r1 and r2.
 
 from __future__ import annotations
 
+import itertools
 import json
+from types import SimpleNamespace
 
 from browser_agent.eval.runner import RunConfig
 from browser_agent.harness.events import read_events
+from browser_agent.memory.skill import Skill, parse_skill_md
+from browser_agent.memory.store import MemoryStore
 from request_episode import (
     ORDERS_LINK,
     SITE,
     TASK_ID,
     as_lines,
     episode_browser,
+    episode_replies,
     run_episode,
 )
 
@@ -118,3 +123,104 @@ def test_a_new_tab_changes_the_result_of_the_action_that_opened_it_and_nothing_e
         now != then for now, then in zip(as_lines(requests)[1:], recorded()[1:], strict=True)
     )
     assert [e["url"] for e in events_of(run_dir) if e["type"] == "new_tab"] == [NEW_TAB]
+
+
+# -- with memory switched on ----------------------------------------------------
+
+OPEN_ORDERS = """---
+name: open-order-grid
+description: Open the order grid.
+version: 1
+params: {}
+url_pattern: "^/"
+---
+
+1. Open /sales/order/. Check: the search box of the grid is there.
+"""
+OPEN_ORDERS_CODE = (
+    'def run():\n    goto("/sales/order/")\n    check(role="textbox", name="Search by keyword")\n'
+)
+MEMORY_ON = {
+    "name": "fixture",
+    "memory_build": "b",
+    "switches": {"skills": True, "site_facts": True, "lessons": True},
+}
+LESSON = "On the order grid, search by the order number before reading the rows."
+
+
+def memory_build(root):
+    meta, body = parse_skill_md(OPEN_ORDERS)
+    store = MemoryStore.create(root / "memory_store" / "b", {"name": "b"})
+    store.add_skill(Skill(meta, body, OPEN_ORDERS_CODE), {"task_id": 1})
+    store.add("site_fact", "fact-001", "Orders are under SALES > Orders.", "^/sales/", [{}])
+    store.add("lesson", "lesson-001", LESSON, "^/sales/order/?$", [{}])
+    store.write_manifest()
+    store.close()
+
+
+def test_with_memory_on_the_prefix_is_fixed_and_lessons_follow_the_page(tmp_path):
+    memory_build(tmp_path)
+    plain = [json.loads(line) for line in recorded()]
+
+    requests, run_dir = run_episode(tmp_path, config=RunConfig.model_validate(MEMORY_ON))
+
+    assert len(requests) == len(plain)
+    prefix = requests[0]["input"][0]
+    assert prefix["content"].startswith("Notes from earlier work on this site.")
+    assert "- open-order-grid: Open the order grid. (starts on ^/; has code)" in prefix["content"]
+    assert "- Orders are under SALES > Orders. (pages ^/sales/)" in prefix["content"]
+    for request, before in zip(requests, plain, strict=True):
+        # The same message in front of every request; the task comes right after it.
+        assert request["input"][0] == prefix
+        assert request["input"][1] == before["input"][0]
+        assert [tool["name"] for tool in request["tools"]][-2:] == ["load_skill", "run_skill"]
+        assert request["instructions"] == before["instructions"]
+        # A lesson is in the tail exactly while the page is the order grid.
+        tail = request["input"][-1]["content"]
+        on_grid = "URL: http://site.test/admin/sales/order/\n" in tail
+        assert (LESSON in tail) is on_grid
+    # Everything but the tail only grows at its end, so the cache keeps working.
+    for earlier, later in itertools.pairwise(requests):
+        stable = earlier["input"][:-1]
+        assert later["input"][: len(stable)] == stable
+    record = json.loads((run_dir / "records.jsonl").read_text(encoding="utf-8"))
+    assert record["memory_used"] == {
+        "skills_loaded": [], "skills_run": [], "skills_guided": [],
+        "lessons_shown": ["lesson-001@v1"],
+    }  # fmt: skip
+    config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    assert config["memory"] == {
+        "skills": ["open-order-grid@v1"],
+        "site_facts": ["fact-001@v1"],
+        "lessons": ["lesson-001@v1"],
+    }
+
+
+def test_a_skill_run_by_the_model_goes_through_the_gate_and_leaves_its_events(tmp_path):
+    memory_build(tmp_path)
+    replies = episode_replies()
+    run_skill = {"name": "open-order-grid", "args": "{}"}
+    replies[0].output[-1] = SimpleNamespace(
+        type="function_call", call_id="call_001", name="run_skill", arguments=json.dumps(run_skill)
+    )
+
+    requests, run_dir = run_episode(
+        tmp_path, replies=replies, config=RunConfig.model_validate(MEMORY_ON)
+    )
+
+    result = next(
+        item["output"]
+        for item in requests[1]["input"]
+        if item.get("type") == "function_call_output" and item["call_id"] == "call_001"
+    )
+    assert result == (
+        "Skill open-order-grid ran: 2 steps, every check held. The task is not finished yet: "
+        "look at the page now shown, then finish."
+    )
+    # The code took the agent to the grid: the next page shown is the grid.
+    assert "URL: http://site.test/admin/sales/order/\n" in requests[1]["input"][-1]["content"]
+    kinds = [event["type"] for event in events_of(run_dir)]
+    assert kinds.index("gate_passed") < kinds.index("skill_code_run") < kinds.index("tool_result")
+    record = json.loads((run_dir / "records.jsonl").read_text(encoding="utf-8"))
+    assert record["memory_used"]["skills_run"] == ["open-order-grid@v1"]
+    assert record["finish_reason"] == "finished"

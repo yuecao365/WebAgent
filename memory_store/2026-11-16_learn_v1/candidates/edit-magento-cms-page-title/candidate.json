@@ -1,0 +1,19 @@
+{
+  "template_id": 275,
+  "source": {
+    "run": "2026-11-16_learn_check_off",
+    "task_id": 486,
+    "template_id": 275
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "existing_title": "404 Not Found",
+    "replacement_title": "Bruh bro you clicked the wrong page"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

@@ -1,0 +1,13 @@
+def run(term):
+    click(role="link", name=" MARKETING")
+    check(text="User Content")
+    click(role="link", name="All Reviews")
+    check(role="heading", name="Reviews")
+    type(role="textbox", name="detail", text=term)
+    check(role="textbox", name="detail")
+    click(role="button", name="Search")
+    check(text="records found")
+    select(role="combobox", name="per page", option="200")
+    check(role="table", name="")
+    rows = read(role="table", name="")
+    return_value(len(rows) - 1)

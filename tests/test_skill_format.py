@@ -177,7 +177,9 @@ def test_the_folder_must_carry_the_skills_name(tmp_path):
     meta, body = parse_skill_md(SKILL_MD)
     write_skill(tmp_path / "something-else", Skill(meta, body))
 
-    with pytest.raises(SkillFormatError, match="holds a skill named add-order-comment"):
+    with pytest.raises(
+        SkillFormatError, match="something-else holds skill add-order-comment version 1"
+    ):
         load_skill(tmp_path / "something-else")
     with pytest.raises(SkillFormatError, match=r"has no SKILL\.md"):
         load_skill(tmp_path / "missing")

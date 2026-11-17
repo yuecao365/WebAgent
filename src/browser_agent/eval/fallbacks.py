@@ -93,6 +93,13 @@ KINDS: tuple[Kind, ...] = (
         "the answer changed between the first and the second finish",
         2,
     ),
+    # -- long-term memory -----------------------------------------------------------
+    Kind("skill_loaded", "Skill steps loaded (load_skill)", None, 4),
+    Kind("gate_passed", "run_skill: gate passed, code run", "the code ran through", 4),
+    Kind("gate_rejected", "run_skill: gate rejected, nothing run", None, 4),
+    Kind("skill_step_failed", "Skill code stopped at a step", None, 4),
+    Kind("skill_guided", "Skill steps handed to the model to follow", NEXT_STEP, 4),
+    Kind("lesson_shown", "Lesson shown on a matching page", None, 4),
     # -- the model API ------------------------------------------------------------
     Kind("model_retry", "Model API call retried (429, 5xx, timeout)", "the call went through"),
     Kind("effort_downgraded", "Reasoning effort rejected, downgraded", None, 2),
@@ -264,6 +271,19 @@ def task_fallbacks(events: Sequence[dict[str, Any]]) -> list[Fired]:
                 add("settle_timeout")
             elif kind == "new_tab":
                 add("new_tab", next_ok)
+            elif kind == "skill_loaded":
+                add("skill_loaded")
+            elif kind == "gate_passed":
+                ran = step.others[place + 1] if place + 1 < len(step.others) else {}
+                add("gate_passed", ran.get("type") == "skill_code_run" and bool(ran.get("ok")))
+            elif kind == "gate_rejected":
+                add("gate_rejected")
+            elif kind == "skill_step_failed":
+                add("skill_step_failed")
+            elif kind == "skill_guided":
+                add("skill_guided", next_ok)
+            elif kind == "lesson_shown":
+                add("lesson_shown")
             elif kind == "env_repaired":
                 add("env_repaired")
             elif kind == "browser_restarted":

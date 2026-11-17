@@ -21,9 +21,11 @@ from typing import Any
 # Written into task_start. Version 2 added the events for fallbacks that used to
 # leave no trace (busy-page retries, settle timeouts, provider downgrades, the
 # reason a call was skipped) and the score. Version 3 added new_tab and the
-# environment check before a task (env_repaired, browser_restarted). A log without it
-# is version 1.
-LOG_VERSION = 3
+# environment check before a task (env_repaired, browser_restarted). Version 4 added
+# the events of long-term memory (skill_loaded, gate_passed, gate_rejected,
+# skill_code_run, skill_step_failed, skill_guided, lesson_shown). A log without it is
+# version 1.
+LOG_VERSION = 4
 
 # The shape of EventLog.append, for the parts of the harness that only report.
 Notify = Callable[..., Any]

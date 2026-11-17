@@ -1,0 +1,22 @@
+{
+  "template_id": 288,
+  "source": {
+    "run": "2026-11-16_learn_c2",
+    "task_id": 11,
+    "template_id": 288
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "term": "disappointed"
+  },
+  "other_args": [
+    {
+      "term": "waterproof"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

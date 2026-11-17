@@ -1,0 +1,13 @@
+def run(existing_title, replacement_title):
+    goto("/cms/page/")
+    check(role="heading", name="Pages")
+    click(role="button", name="Select", row=existing_title)
+    check(role="link", name="Edit", row=existing_title)
+    click(role="link", name="Edit", row=existing_title)
+    check(url="^/cms/page/edit/")
+    check(role="textbox", name="Page Title *")
+    type(role="textbox", name="Page Title *", text=replacement_title)
+    check(text=replacement_title)
+    click(role="button", name="Save")
+    check(text="You saved the page.")
+    check(role="heading", name=replacement_title)

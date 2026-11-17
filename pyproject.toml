@@ -39,6 +39,8 @@ filterwarnings = ["ignore::SyntaxWarning"]
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+# Skill code in a memory build is an artifact of the build, never reformatted or linted.
+extend-exclude = ["memory_store"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "RUF", "ANN", "PT", "RET"]

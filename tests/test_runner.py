@@ -13,6 +13,7 @@ from browser_agent.eval.fallbacks import TaskLog, build_ledger
 from browser_agent.eval.runner import RunConfig, new_run_dir, select_tasks, summarize
 from browser_agent.eval.webarena import ShoppingAdmin, SiteConfig, SiteError
 from browser_agent.harness.events import LOG_VERSION, EventLog, read_events
+from browser_agent.memory.pipeline import BuildConfig
 
 from fakes import FINISH_OK, FakeSession, FakeSite, call, make_client, reply
 
@@ -96,8 +97,11 @@ def test_a_config_can_pick_the_api_and_the_reasoning_effort(tmp_path, monkeypatc
 
 def test_checked_in_configs_are_valid():
     for path in sorted((runner.Path(__file__).resolve().parents[1] / "configs").glob("*.json")):
-        if path.name != "subset.json":
-            RunConfig.model_validate_json(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        if path.name.startswith("memory_"):
+            BuildConfig.model_validate_json(text)
+        elif path.name not in ("subset.json", "probe.json"):
+            RunConfig.model_validate_json(text)
 
 
 def test_a_run_directory_is_never_reused(tmp_path):
@@ -492,3 +496,24 @@ def test_a_task_whose_browser_cannot_be_prepared_is_a_harness_error_and_is_not_r
     assert (rows["browser_restarted"]["triggers"], rows["browser_restarted"]["recovered"]) == (1, 0)
     # The log says which version it is although the task never started.
     assert rows["new_tab"]["logged"]
+
+
+def test_memory_switches_are_off_by_default_and_need_a_build_when_on():
+    config = RunConfig(name="x")
+
+    assert not config.switches.uses_memory()
+    assert config.memory_build is None
+    with pytest.raises(ValidationError, match="memory_build must name the build"):
+        RunConfig.model_validate({"name": "x", "switches": {"skills": True}})
+    with_build = RunConfig.model_validate(
+        {"name": "x", "switches": {"lessons": True}, "memory_build": "2026-01-01_b"}
+    )
+    assert with_build.switches.uses_memory()
+
+
+def test_a_task_without_memory_records_nothing_about_memory(tmp_path, monkeypatch):
+    record, _, _, _, _ = run_one_task(
+        tmp_path, monkeypatch, FakeSession(), [reply(call("finish", **FINISH_OK))]
+    )
+
+    assert "memory_used" not in record

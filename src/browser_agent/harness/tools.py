@@ -14,7 +14,7 @@ import json
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
@@ -124,7 +124,7 @@ class ToolSpec:
     name: str
     description: str
     parameters: dict[str, Any]
-    args_model: type[_Args]
+    args_model: type[BaseModel]
 
 
 _REF = {"type": "integer", "description": "The number in [brackets] before the element."}
@@ -232,6 +232,16 @@ TOOLS: tuple[ToolSpec, ...] = (
 FINISH_TOOL = TOOLS[-1]
 
 
+class ExtraTools(Protocol):
+    """Tools beyond the fixed set, present only when a switch adds them."""
+
+    specs: Sequence[ToolSpec]
+
+    def handles(self, name: str) -> bool: ...
+
+    def execute(self, args: BaseModel) -> ToolOutcome: ...
+
+
 @dataclass(frozen=True)
 class ToolOutcome:
     """What a tool call produced."""
@@ -299,7 +309,9 @@ class ToolExecutor:
         search: PageSearch | None = None,
         sleep: Callable[[float], None] = time.sleep,
         notify: Notify | None = None,
+        extra: ExtraTools | None = None,
     ) -> None:
+        self._extra = extra
         self._search = search
         self._sleep = sleep
         # Where fallbacks taken in here are reported; normally the task's event log.
@@ -308,7 +320,9 @@ class ToolExecutor:
         self._allowed_origins = frozenset(origin.lower() for origin in allowed_origins)
         self._render = render
         self._render_section = render_section
-        self._specs = {spec.name: spec for spec in TOOLS}
+        # The fixed tools first: with nothing extra the list is exactly TOOLS.
+        self.tools: tuple[ToolSpec, ...] = (*TOOLS, *(extra.specs if extra else ()))
+        self._specs = {spec.name: spec for spec in self.tools}
         self._previous: Observation | None = None
         self._show_whole_page = False
 
@@ -330,6 +344,8 @@ class ToolExecutor:
         if isinstance(args, WriteNoteArgs):
             return ToolOutcome(True, "Note saved.", note=args.text)
         try:
+            if self._extra is not None and self._extra.handles(name):
+                return self._extra.execute(args)
             if isinstance(args, ReadPageArgs):
                 return self._read(args)
             return self._act(args)

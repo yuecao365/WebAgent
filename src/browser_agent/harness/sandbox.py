@@ -61,7 +61,11 @@ _METHODS = frozenset(
     }
 )  # fmt: skip
 
-_STATEMENTS = (ast.Expr, ast.Assign, ast.AugAssign, ast.Return, ast.If, ast.For, ast.Pass)
+_STATEMENTS = (
+    ast.Expr, ast.Assign, ast.AugAssign, ast.Return, ast.If, ast.For, ast.Pass,
+    # Leaving a bounded loop early is how "the first row that matches" is written.
+    ast.Break, ast.Continue,
+)  # fmt: skip
 _EXPRESSIONS = (
     ast.Call, ast.Name, ast.Constant, ast.Attribute, ast.Subscript, ast.Slice,
     ast.List, ast.Tuple, ast.Dict, ast.Compare, ast.BoolOp, ast.UnaryOp, ast.BinOp,

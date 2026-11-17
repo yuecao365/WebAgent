@@ -1,0 +1,21 @@
+{
+  "template_id": 268,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 704,
+    "template_id": 268
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "from_date": "02/01/2023",
+    "to_date": "02/28/2023"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"from_date\": \"02/03/2023\", \"to_date\": \"02/11/2023\"} not used: not shown on the episode's pages: 02/03/2023, 02/11/2023"
+  ],
+  "attempts": 1
+}

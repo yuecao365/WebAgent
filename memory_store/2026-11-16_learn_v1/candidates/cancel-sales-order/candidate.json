@@ -1,0 +1,18 @@
+{
+  "template_id": 257,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 470,
+    "template_id": 257
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "order_id": 302
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

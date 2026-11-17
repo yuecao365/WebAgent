@@ -1,0 +1,26 @@
+{
+  "template_id": 270,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 107,
+    "template_id": 270
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "start_date": "05/01/2022",
+    "end_date": "12/31/2022"
+  },
+  "param_slots": {
+    "start_date": "period",
+    "end_date": "period"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"start_date\": \"06/01/2022\", \"end_date\": \"09/30/2022\"} not used: not shown on the episode's pages: 06/01/2022, 09/30/2022",
+    "other_args {\"start_date\": \"10/01/2022\", \"end_date\": \"12/31/2022\"} not used: not shown on the episode's pages: 10/01/2022"
+  ],
+  "attempts": 1
+}

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from browser_agent.browser.environment import TaskStart, prepare
 from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
@@ -37,6 +37,9 @@ from browser_agent.harness.events import LOG_VERSION, EventLog
 from browser_agent.harness.llm import LLMClient, client_from_env
 from browser_agent.harness.loop import AgentLoop, Budgets, LoopConfig
 from browser_agent.harness.tools import ToolExecutor
+from browser_agent.memory.library import Memory, load_memory
+from browser_agent.memory.runtime import SkillTools
+from browser_agent.memory.skill_api import site_path
 
 # AGENTS.md: anything larger than a smoke test needs the user's go-ahead.
 SMOKE_TASK_LIMIT = 5
@@ -72,6 +75,16 @@ class Switches(BaseModel):
     pages_in_history: bool = False
     # Hold back the first finish once and ask the model to check its answer on the page.
     verify_before_finish: bool = False
+    # Long-term memory, from the build the run config names. Skills: listed in the
+    # prompt's stable prefix, with the tools load_skill and run_skill.
+    skills: bool = False
+    # Site facts: listed in the stable prefix, up to a cap.
+    site_facts: bool = False
+    # Lessons: shown in the tail while the page's address matches.
+    lessons: bool = False
+
+    def uses_memory(self) -> bool:
+        return self.skills or self.site_facts or self.lessons
 
     def view_options(self) -> ViewOptions:
         return ViewOptions(
@@ -100,6 +113,15 @@ class RunConfig(BaseModel):
     reasoning_effort: str | None = None
     budgets: BudgetSettings = Field(default_factory=BudgetSettings)
     switches: Switches = Field(default_factory=Switches)
+    # The memory build under memory_store/ that the memory switches read from. A run
+    # opens it read-only; naming it here is what makes a result reproducible.
+    memory_build: str | None = None
+
+    @model_validator(mode="after")
+    def _memory_needs_a_build(self) -> RunConfig:
+        if self.switches.uses_memory() and not self.memory_build:
+            raise ValueError("a memory switch is on, so memory_build must name the build to use")
+        return self
 
 
 def select_tasks(config: RunConfig, root: Path) -> list[dict[str, Any]]:
@@ -293,6 +315,24 @@ def _git_commit(root: Path) -> str | None:
     return done.stdout.strip() or None
 
 
+def memory_used(events: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Which memory items, with their versions, a task actually touched."""
+    used: dict[str, list[str]] = {
+        "skills_loaded": [], "skills_run": [], "skills_guided": [], "lessons_shown": [],
+    }  # fmt: skip
+    kinds = {
+        "skill_loaded": "skills_loaded",
+        "skill_code_run": "skills_run",
+        "skill_guided": "skills_guided",
+    }
+    for event in events:
+        if event["type"] in kinds:
+            used[kinds[event["type"]]].append(f"{event['skill']}@v{event['version']}")
+        elif event["type"] == "lesson_shown":
+            used["lessons_shown"].append(event["lesson"])
+    return used
+
+
 def run_task(
     entry: dict[str, Any],
     env: ShoppingAdmin,
@@ -301,6 +341,7 @@ def run_task(
     config: RunConfig,
     run_dir: Path,
     scheduler: ResetScheduler,
+    memory: Memory | None = None,
 ) -> dict[str, Any]:
     """Reset if needed, run and score one task; returns its record."""
     task = env.task(entry["task_id"])
@@ -332,22 +373,38 @@ def run_task(
 
     # One renderer per task: it remembers the last page to diff against.
     renderer = PageRenderer(config.switches.view_options())
+    origin, base = origin_of(env.site.url), env.site.admin_url
+    skill_tools = (
+        SkillTools(memory.skills, browser, base, [origin], notify=events.append)
+        if memory is not None and memory.skills
+        else None
+    )
+    executor = ToolExecutor(
+        browser,
+        allowed_origins=[origin],
+        render=renderer.render,
+        render_section=renderer.section,
+        search=renderer.find,
+        notify=events.append,
+        extra=skill_tools,
+    )
+
+    def lessons_at(url: str) -> list[tuple[str, str]]:
+        assert memory is not None
+        return [(lesson.label, lesson.text) for lesson in memory.lessons_at(site_path(url, base))]
+
     loop = AgentLoop(
         llm=llm.labelled(run=run_dir.name, task_id=task.task_id),
-        executor=ToolExecutor(
-            browser,
-            allowed_origins=[origin_of(env.site.url)],
-            render=renderer.render,
-            render_section=renderer.section,
-            search=renderer.find,
-            notify=events.append,
-        ),
+        executor=executor,
         events=events,
         config=LoopConfig(
             budgets=Budgets(**config.budgets.model_dump()),
             multi_action=config.switches.multi_action,
             pages_in_history=config.switches.pages_in_history,
             verify_before_finish=config.switches.verify_before_finish,
+            tools=executor.tools,
+            memory_prefix=memory.prefix() if memory is not None else None,
+            lessons_at=lessons_at if memory is not None and memory.lessons else None,
         ),
     )
     result = loop.run(task.intent)
@@ -384,7 +441,10 @@ def run_task(
     (trace_dir / "eval_result.json").write_text(
         json.dumps(score.detail, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    # Only a run with memory records what of it was used; other records are unchanged.
+    used = {} if memory is None else {"memory_used": memory_used(events.events)}
     return {
+        **used,
         "task_id": task.task_id,
         "template_id": task.template_id,
         "split": entry["split"],
@@ -455,6 +515,16 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
     )
     data_dir = Path(os.environ.get("BROWSER_AGENT_DATA_DIR", "").strip() or root / "data")
     browser_path = os.environ.get("BROWSER_PATH", "").strip()
+    memory = None
+    if config.switches.uses_memory():
+        assert config.memory_build is not None
+        memory = load_memory(
+            root,
+            config.memory_build,
+            skills=config.switches.skills,
+            site_facts=config.switches.site_facts,
+            lessons=config.switches.lessons,
+        )
 
     run_dir = new_run_dir(results, config.name)
     (run_dir / "config.json").write_text(
@@ -466,6 +536,8 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
                 "site_image": env.site.image,
                 "git_commit": _git_commit(root),
                 "dev_response_cache": dev_cache,
+                # Every memory item the run could see, with its version.
+                **({} if memory is None else {"memory": memory.versions()}),
             },
             indent=2,
         ),
@@ -489,7 +561,9 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
     with session:
         for entry in entries:
             try:
-                record = run_task(entry, env, session, llm, config, run_dir, scheduler)
+                record = run_task(
+                    entry, env, session, llm, config, run_dir, scheduler, memory=memory
+                )
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 log = run_dir / "traces" / str(entry["task_id"]) / "events.jsonl"

@@ -1,0 +1,644 @@
+{
+  "written": "2026-11-17T04:33:11+00:00",
+  "items": [
+    {
+      "kind": "skill",
+      "id": "adjust-current-product-price",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:25:01+00:00",
+      "sha256": "e1a0dedab00ca73cc4fef293b8ef8052008857a8d2cb5019498a903742ba8074",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "count-all-reviews",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:25:17+00:00",
+      "sha256": "3d46a141d845f9743058df94c022aaa3d6a6a4cad156ca5e47fdef0bdaa94521",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "cancel-admin-order",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:25:42+00:00",
+      "sha256": "42ae83ef344b02c7b0341818cbca41ecf45f3b732f7b86bf91ba006a50444b0d",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "show-sales-report",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:26:22+00:00",
+      "sha256": "edd65a7d8979be3988137ff5460d32f6c62a7793003597a3fcf206e931492239",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "monthly-orders-report",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:26:48+00:00",
+      "sha256": "997ce4d0220974fe4a279c8c15af1384d2a98edd713a0711219ba651e2272df1",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "show-sales-report-date-range",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:27:22+00:00",
+      "sha256": "ade850ca4b8fe09fc7d1c517866481f69f626f4086a1fc517f57f30246691ce7",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "change-cms-page-title",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:27:44+00:00",
+      "sha256": "afe1d7e19ccbd8b4e448df0a3aba804c8dbb863567d039bc4149d3ca1364212c",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "notify-customer-on-pending-order",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:28:18+00:00",
+      "sha256": "edeb28d6e2b762d59e63a5604d874d108057a14a76c240e651d3f5cee60ad64a",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "add-order-shipment-tracking",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:29:03+00:00",
+      "sha256": "f4c897a2ceaa435bcb715202db358ff4890a71eaee8cb041a7d47184bc63eebf",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "count-reviews-by-term",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:29:37+00:00",
+      "sha256": "112b10b1b42d6c0db4c7a9f550549414fadbf9f584fb267c1163ba6f429b8519",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "find-customer-by-phone",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:29:57+00:00",
+      "sha256": "d170b191ed63b283bc3e0e03628017af3cdbbc87b184701c3947cd72cf26b811",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "get-latest-order-attribute",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:30:44+00:00",
+      "sha256": "73daff95065b4e830169550abadec46240dc6d63570ad6a4e65c79bd0c78aabb",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "skill",
+      "id": "total-items-in-recent-complete-orders",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:15+00:00",
+      "sha256": "cba0b2dc317adfd76562c0df9bc613fd55b62892bd41bbe725ae54a3908e41bd",
+      "files": [
+        "SKILL.md"
+      ]
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-001",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "6c2f5f93c97186d760bb054a2904b1a9a7c86428c27d0f4f08644b47779dbde7"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-002",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "64585a7c2a6e3f74f83399a24b44fb65338b2c51862503a6c5a18535c24c572c"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-003",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "309bb0ab8befdd76a406088962fede220f7c7f15113a7f0df8b3a86b15b65dd0"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-004",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "8de931c4f8398583ddcf6e1f6b51421803d4b0a5d340df245f64a2f88b75345c"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-005",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "f12fa83ddd928f105e425e1928f6aed6940f8a9c9091f3c15e916c588533c244"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-006",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "bfec085a21a5b9e499ee9d0a2efc85d2bd57b7b7fabfe19599617d4ba3995663"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-007",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "82dda5f5f0fb81d353fd378eca70051fcd20d76dca350ccd37e0517c8f35fd47"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-008",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "8a75325cadf110f7ad03a6923b204f17ba4d368e467d17654d33c60f4d1cbadc"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-009",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "ccf0fbadd6d507884249ec9a981554e9dd2136e37c39d2938f293021013b1f4a"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-010",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "b59cb6998020cf67981a7bd37cac6b784a98d990cdfb8b0804fd10863c3415fc"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-011",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "9bf243ed43cb2877bf713966962cf48382457ac96d8fa7c2baf6652f71435326"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-012",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "85376bcb4d118bd39ee6c09c9ced2ac2bbddabbdbcea996cd703ff19a8609519"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-013",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "eda21009783eea1599bfa4f8a5f53419865235fc6883a0b7f97beea372b22bf3"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-014",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "1f92fd73e2c241cefb546db666ad52eaf470cd7ad8fc92408c857f311c1a18f7"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-015",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "b6b9856480eca4e151dee54913330f615f85187fe2f56d3eb2f8fac3b694a6b8"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-016",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "b1da411150d577ec6cc9c2f65efb35fb097eb1598f877f083569dc0a23511698"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-017",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "b6408a804269c3a14be7eee2b40a638c8f47eeb1a59c1faf263fa096c5a9b5a8"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-018",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "b2283acfdf3f546a71e7a61f0e060e1c2348768d9d6c524953eba6fa08fceff0"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-019",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "ef344f9cdfab1927a19659683217dfc3c9a26dafb7fbd0fb0ab63d11dc6edbd9"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-020",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "d2427adc795a6e6f2f79e9fcd376a8f394576a9bafd8c6278192676f5bb0b9bb"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-021",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:39+00:00",
+      "sha256": "06060b2abc373f879e94004b8ae70fb585d1e089153277e52a87adb7356ad59d"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-022",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "6493c781470b6ebd9ccbf0acc6a8c10e59cd962aebc44de453dff9dde0507c3c"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-023",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "302f08e3a4786b7ea3ecbc2e59e88e8c463f6ea27776b50c915ab7b7f6fc5ab4"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-024",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "d2427adc795a6e6f2f79e9fcd376a8f394576a9bafd8c6278192676f5bb0b9bb"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-025",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "6f5a869c100c866d036ba425174040e544ab1c703987935af7ba652287132c79"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-026",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "7a488ee93dfbe220d0ff17bb624d1c87fa0af1ac23fa888eff930eb2be69a8fd"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-027",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "5c03140f0e9b1640a7aafa7c2975de2944a979267c4094c31bfdd89aa43f37ab"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-028",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "4f6808044e2cf7766cbf731f108438daa446ca393de391a513baca47fb245669"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-029",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "a14fd8e3844c928f8b70cc9cb504bc53e2ac5f38a8d8801961c73bced8238dfc"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-030",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "c665e216d63d9b2ec200a1699b9aec38a67bfc05d3745181525a7c453376a5f7"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-031",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "929d9ba176a23e5463c6fde4e8862a7304b01a8442a3c8e674e313c5ad3285a0"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-032",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "74a8a79ce6c11ae6431c9e671730d7fcf618ae3c09a19456bcf912da6c73f263"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-033",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "3fe0055109a973bc6bbc6fc505489d5b8fe802d1ee25890f5603616659a9510a"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-034",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "a4d9c921bced2d41a950231cd5c84eeaa3549715e41687c6a814c4c0192081e8"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-035",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "e3955cadb993bd678510f3ddb1e8c6ffd8d2875549a81408e63352603e710c11"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-036",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "d2427adc795a6e6f2f79e9fcd376a8f394576a9bafd8c6278192676f5bb0b9bb"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-037",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "12741afabbbe5940f19068b78ef09afc91908a2fab1c14f0101f824be98930bd"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-038",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:31:40+00:00",
+      "sha256": "44018213645b2c8fb3a9a59dfd2637f8d9925d89b74ca9122855f0891cf92d0e"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-002",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "64585a7c2a6e3f74f83399a24b44fb65338b2c51862503a6c5a18535c24c572c"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-004",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "8de931c4f8398583ddcf6e1f6b51421803d4b0a5d340df245f64a2f88b75345c"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-005",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "28fd2844dde25448e0863db77781c7edde179325237b7cd086cf0614342aea02"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-010",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "2e8e6463cff132b7261cf66244e83a27aedcb258da3c8d7d9bd5106fb3249bbb"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-018",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "78d127ba3a3858d4c7f44c6c46a93b302a03a86f1af29f662ff46a45772bc90f"
+    },
+    {
+      "kind": "site_fact",
+      "id": "fact-031",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:32:02+00:00",
+      "sha256": "42c676c312c571f3a8d8ded8c8fab1e90b0861521caaf01ceebe9b8cf0604e8b"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-001",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "88ec4d38f62a9213db033afacbf163d389828ebb5651f76f334121569bd0dbc1"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-002",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "38bfd8a883919a17297fc2ec9c9cd3def4f2a87cf4df2921a79b10523c7c1dc5"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-003",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "c81d77ea15f0bd1096a145bda9fbf6885bfb0494f9b6506ab5e8e70fd188a198"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-004",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "74f88b49da3f6c3312749594d068a9d6702120a8e23aa494c574d4f75e0c80e5"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-005",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "bf186bcdff7183287e087a7b1da0b61c30e6dc2576dbdda23593ac78b1ce6250"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-006",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "3acbd56ca7a43b061ae9beb5df8a6901d816dd2db63611a5b43779802215511a"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-007",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "5be29c862a9a226b71f75e5360cc35df34c82da49998dbfdc2d0e05c077752da"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-008",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "7c3a3a4bc9f622a769ad27845bacea5dbd46c91731877c3f7c14df3a812a0cd3"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-009",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "26eb50f59d3541dd0457b1d03e4aff2f6f4adb44e82c71f5e491dfe7f1854ed9"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-010",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "5e7f157a12666b81f2e64608e8c3c91a879fe819e9d87dc94cbb51fe94c1b6e4"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-011",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "5a39843ca1c331530bd27c5ca3b68d17cf4283064c63090b278c8bdfa087c565"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-012",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "09fe592f7554ceea9fbb38482f70fc5d7eb2658ec26ea092478fb54fd18f2b7b"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-013",
+      "version": 1,
+      "status": "retired",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "2727621d982f236c65d195d01a421178999491962242accd8383af28e618741c"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-014",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "9174da1165f98982b8b68a829a3a3e7dd1b10c3d91742cd33d59431dd4cb45e7"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-015",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "65535444f74e0da738e980ab8620b74fc437a2a21902f59c697f280aa0401720"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-016",
+      "version": 1,
+      "status": "active",
+      "created": "2026-11-17T04:32:58+00:00",
+      "sha256": "8f8fda129b4bbe71a3a94e3b42a572494ef654c1ce01dc4ff4a783444fbe3fd1"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-001",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:33:11+00:00",
+      "sha256": "b60155b3845c67bb4eb3e73c8ac05252b9598f5467f410314726d3218627ddb1"
+    },
+    {
+      "kind": "lesson",
+      "id": "lesson-002",
+      "version": 2,
+      "status": "active",
+      "created": "2026-11-17T04:33:11+00:00",
+      "sha256": "f6aa1fe2babfa0849b73cb7c2af65ae2caeeda008601d8e5a8e6fd2fd9a6857f"
+    }
+  ]
+}

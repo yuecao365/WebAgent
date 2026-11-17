@@ -766,3 +766,19 @@ def test_missing_settings_are_named(clean_env):
     assert "LLM_PRICE_INPUT_PER_MTOK" in message
     assert "BUDGET_USD" in message
     assert "LLM_MODEL" not in message
+
+
+def test_a_cache_key_never_exceeds_what_the_api_accepts(tmp_path):
+    client, provider, _, _ = make_client(tmp_path, [reply(), reply(), reply()])
+    long_a = client.labelled(run="memory_build_learn_v1", task_id="reflect-2026-11-16_learn_b2-213")
+    long_b = client.labelled(run="memory_build_learn_v1", task_id="reflect-2026-11-16_learn_b2-214")
+    short = client.labelled(run="2026-11-16_baseline_test_r3b", task_id=216)
+
+    for labelled in (long_a, long_b, short):
+        labelled.complete("system", [UserMessage("hi")], [])
+
+    keys = [call["options"].cache_key for call in provider.calls]
+    assert all(len(key) <= 64 for key in keys)
+    # Long names are cut but stay distinct; a short one is exactly as before.
+    assert keys[0] != keys[1]
+    assert keys[2] == "browser-agent-2026-11-16_baseline_test_r3b-216"

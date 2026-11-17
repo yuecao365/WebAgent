@@ -1,0 +1,13 @@
+{
+  "name": "learn_v3",
+  "runs": [
+    "2026-11-16_learn_b2",
+    "2026-11-16_learn_c2",
+    "2026-11-16_learn_check_off",
+    "2026-11-16_learn_check_on"
+  ],
+  "subset": "configs/subset.json",
+  "split": "learn",
+  "reasoning_effort": "medium",
+  "max_output_tokens": 12000
+}

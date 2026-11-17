@@ -874,6 +874,8 @@ DEFAULT_EFFORT = "low"
 # Chat Completions refuses it (gpt-6-luna), and it won the learn-task arms. An
 # OpenAI-compatible endpoint that has only Chat Completions sets LLM_API=chat.
 DEFAULT_API = "responses"
+# The longest prompt_cache_key the API accepts.
+MAX_CACHE_KEY_CHARS = 64
 
 
 def _env_effort() -> str | None:
@@ -1168,7 +1170,14 @@ class LLMClient:
     def _cache_key(self) -> str | None:
         """One key per task: its steps share a prefix, other tasks do not."""
         task = self._labels.get("task_id")
-        return None if task is None else f"browser-agent-{self._labels.get('run', 'run')}-{task}"
+        if task is None:
+            return None
+        key = f"browser-agent-{self._labels.get('run', 'run')}-{task}"
+        if len(key) <= MAX_CACHE_KEY_CHARS:
+            return key
+        # The API refuses a longer key. A digest keeps long names apart from each other.
+        digest = hashlib.sha256(key.encode()).hexdigest()[:12]
+        return f"{key[: MAX_CACHE_KEY_CHARS - 13]}-{digest}"
 
     def complete(
         self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
@@ -1258,17 +1267,28 @@ def client_from_env(
     response_cache: Path | None = None,
     api: str | None = None,
     effort: str | None = None,
+    model: str | None = None,
+    pricing: Pricing | None = None,
+    max_output_tokens: int | None = None,
 ) -> LLMClient:
     """Build the client for a paid run from .env settings.
 
     api and effort, when given, take the place of LLM_API and LLM_REASONING_EFFORT,
     so that an experiment config can pick them per arm. effort "omit" sends none.
+    model names another model than LLM_MODEL (for building memory); its prices must
+    then be given too, because those in .env belong to LLM_MODEL.
     """
     config = LLMConfig.from_env()
     if api is not None:
         config = replace(config, api=api)
     if effort is not None:
         config = replace(config, effort=None if effort == "omit" else effort)
+    if model is not None and model != config.model:
+        if pricing is None:
+            raise ModelError(f"prices are needed to use {model} instead of {config.model}")
+        config = replace(config, model=model, pricing=pricing)
+    if max_output_tokens is not None:
+        config = replace(config, max_output_tokens=max_output_tokens)
     ledger = SpendLedger(results_dir, config.budget_usd)
     return LLMClient(
         provider=build_provider(config),

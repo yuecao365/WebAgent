@@ -217,3 +217,24 @@ def test_errors_raised_by_a_primitive_pass_through_unchanged():
 
     with pytest.raises(StepFailed, match="does not show it"):
         run_sandboxed(GOOD, primitives, {"order": "000000299"})
+
+
+def test_a_bounded_loop_may_be_left_early():
+    source = body(
+        'rows = read(role="table", name="")',
+        'found = ""',
+        "for row in rows:",
+        '    if row[0] == "":',
+        "        continue",
+        "    if order in row[1]:",
+        "        found = row[2]",
+        "        break",
+        "return_value(found)",
+    )
+    calls = Calls(
+        read_result=[["", "x", "no"], ["1", "000000299", "yes"], ["2", "000000299", "late"]]
+    )
+
+    run_sandboxed(source, calls.primitives(), {"order": "299"})
+
+    assert calls.log[-1] == ("return_value", ("yes",), {})
