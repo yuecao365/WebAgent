@@ -310,8 +310,12 @@ class ToolExecutor:
         sleep: Callable[[float], None] = time.sleep,
         notify: Notify | None = None,
         extra: ExtraTools | None = None,
+        site_base: str | None = None,
     ) -> None:
         self._extra = extra
+        # Set only when memory is on: skills give addresses relative to the site, and
+        # goto then takes such an address too. Without it goto is as it always was.
+        self._site_base = site_base.rstrip("/") if site_base else None
         self._search = search
         self._sleep = sleep
         # Where fallbacks taken in here are reported; normally the task's event log.
@@ -405,10 +409,13 @@ class ToolExecutor:
         elif isinstance(args, TypeArgs):
             message = actions.type_text(self._browser, args.ref, args.text, args.submit)
         elif isinstance(args, GotoArgs):
-            if origin_of(args.url) not in self._allowed_origins:
+            url = args.url
+            if self._site_base is not None and url.startswith("/"):
+                url = self._site_base + url
+            if origin_of(url) not in self._allowed_origins:
                 allowed = ", ".join(sorted(self._allowed_origins))
-                raise ActionError(f"{args.url} is outside the task's site; allowed: {allowed}")
-            message = actions.goto(self._browser, args.url)
+                raise ActionError(f"{url} is outside the task's site; allowed: {allowed}")
+            message = actions.goto(self._browser, url)
         elif isinstance(args, ScrollArgs):
             message = actions.scroll(self._browser, args.direction)
         else:  # pragma: no cover - every tool is handled above

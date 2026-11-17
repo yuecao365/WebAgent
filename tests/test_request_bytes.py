@@ -167,7 +167,10 @@ def test_with_memory_on_the_prefix_is_fixed_and_lessons_follow_the_page(tmp_path
     assert len(requests) == len(plain)
     prefix = requests[0]["input"][0]
     assert prefix["content"].startswith("Notes from earlier work on this site.")
-    assert "- open-order-grid: Open the order grid. (starts on ^/; has code)" in prefix["content"]
+    assert (
+        "- open-order-grid: Open the order grid. (starts on ^/; parameters: none; has code)"
+        in prefix["content"]
+    )
     assert "- Orders are under SALES > Orders. (pages ^/sales/)" in prefix["content"]
     for request, before in zip(requests, plain, strict=True):
         # The same message in front of every request; the task comes right after it.

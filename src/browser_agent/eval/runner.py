@@ -387,6 +387,7 @@ def run_task(
         search=renderer.find,
         notify=events.append,
         extra=skill_tools,
+        site_base=base if memory is not None else None,
     )
 
     def lessons_at(url: str) -> list[tuple[str, str]]:

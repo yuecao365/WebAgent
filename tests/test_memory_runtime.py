@@ -93,7 +93,9 @@ def test_load_skill_shows_the_parameters_and_the_steps_without_acting():
     assert not outcome.acted
     assert outcome.summary.startswith(
         "Skill read-order-total. It has verified code: run_skill can carry it out.\n"
-        "Parameters: order_number (string): As the grid shows it.\n\n"
+        "Parameters: order_number (string): As the grid shows it.\n"
+        "Addresses in the steps are relative to http://site.test/admin: /sales/order/ means "
+        "http://site.test/admin/sales/order/. goto accepts either form.\n\n"
         '1. Click "View" in the row of the order.'
     )
     assert events == [("skill_loaded", {"skill": "read-order-total", "version": 2})]
@@ -288,11 +290,11 @@ def test_the_prefix_lists_skills_by_name_description_and_address_then_the_facts(
     assert prefix.startswith("Notes from earlier work on this site.")
     assert (
         "- read-order-total: Read the grand total of an order. "
-        "(starts on ^/sales/order/?$; has code)" in prefix
+        "(starts on ^/sales/order/?$; parameters: order_number; has code)" in prefix
     )
     assert (
-        "- guide: Read the grand total of an order. (starts on ^/sales/order/?$; steps only)"
-        in prefix
+        "- guide: Read the grand total of an order. "
+        "(starts on ^/sales/order/?$; parameters: order_number; steps only)" in prefix
     )
     assert "Site facts:\n- Orders are under SALES > Orders. (pages ^/sales/)" in prefix
     assert prefix.index("Skills:") < prefix.index("Site facts:")

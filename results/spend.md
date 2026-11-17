@@ -22,5 +22,7 @@
 | memory_build_learn_v1 | 31 | 233496 | 37512 | 0.0472 |
 | memory_build_learn_v2 | 4 | 28242 | 6306 | 0.0067 |
 | memory_build_learn_v3 | 53 | 482364 | 48197 | 0.0835 |
+| 2026-11-16_learn_memory_debug | 113 | 555183 | 3361 | 0.0552 |
+| 2026-11-16_learn_c_medium | 101 | 319706 | 5062 | 0.0299 |
 
-Total: $1.0870 of the $5.00 cap.
+Total: $1.1721 of the $5.00 cap.

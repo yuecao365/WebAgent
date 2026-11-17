@@ -97,8 +97,19 @@ def _parameters(skill: Skill) -> str:
     return f"Parameters: {listed}."
 
 
-def _steps(skill: Skill) -> str:
-    return f"{_parameters(skill)}\n\n{skill.body}"
+def _steps(skill: Skill, base_url: str) -> str:
+    """The skill as the model reads it: parameters, how to read its addresses, steps.
+
+    Skills give addresses relative to the site. A model that follows the steps itself
+    has to know what they are relative to: left to guess, it opened the storefront
+    instead of the admin and gave up on a 404.
+    """
+    base = base_url.rstrip("/")
+    addresses = (
+        f"Addresses in the steps are relative to {base}: /sales/order/ means "
+        f"{base}/sales/order/. goto accepts either form."
+    )
+    return f"{_parameters(skill)}\n{addresses}\n\n{skill.body}"
 
 
 class SkillTools:
@@ -139,7 +150,7 @@ class SkillTools:
             if skill.code is not None
             else "It has no verified code: follow the steps yourself."
         )
-        return ToolOutcome(True, f"Skill {name}. {code}\n{_steps(skill)}")
+        return ToolOutcome(True, f"Skill {name}. {code}\n{_steps(skill, self._base)}")
 
     def run(self, name: str, raw_args: str) -> ToolOutcome:
         skill = self._skills.get(name)
@@ -162,7 +173,8 @@ class SkillTools:
             return ToolOutcome(
                 True,
                 f"Skill {name} was not run: {gate.detail}. Nothing was executed. Follow its "
-                f"steps yourself, with {json.dumps(args, ensure_ascii=False)}:\n{_steps(skill)}",
+                f"steps yourself, with {json.dumps(args, ensure_ascii=False)}:\n"
+                f"{_steps(skill, self._base)}",
             )
         self._report("gate_passed", skill)
         run = run_skill_code(skill, args, self._browser, self._base, self._allowed)
@@ -213,7 +225,8 @@ class SkillTools:
             f"Skill {skill.name} stopped at {where}: {run.error}\n"
             f"These calls had been carried out before it:\n{carried_out}\n"
             "Nothing after that was done. Look at the page now shown and continue yourself "
-            f"from there, with {json.dumps(args, ensure_ascii=False)}:\n{_steps(skill)}",
+            f"from there, with {json.dumps(args, ensure_ascii=False)}:\n"
+            f"{_steps(skill, self._base)}",
             navigated=True,
             acted=True,
         )

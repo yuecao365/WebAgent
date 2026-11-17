@@ -407,3 +407,19 @@ def test_recover_returns_to_a_page():
 
 def test_schemas_are_json_serialisable():
     json.dumps([tool.parameters for tool in TOOLS])
+
+
+def test_goto_takes_a_site_relative_address_only_when_a_site_base_is_given():
+    """Skills give addresses relative to the site; without memory goto is as before."""
+    browser = FakeBrowser()
+    with_base = executor(browser, site_base="http://site.test/admin/")
+
+    opened = with_base.execute("goto", {"url": "/sales/order/"})
+    absolute = with_base.execute("goto", {"url": "http://site.test/admin/cms/page/"})
+    without = executor().execute("goto", {"url": "/sales/order/"})
+
+    assert opened.ok
+    assert opened.summary.startswith("Opened http://site.test/admin/sales/order/.")
+    assert absolute.ok
+    assert not without.ok
+    assert "outside the task's site" in without.summary

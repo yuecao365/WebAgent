@@ -56,9 +56,12 @@ class Memory:
             lines = [SKILLS_HEAD]
             for skill in self.skills.values():
                 code = "has code" if skill.code is not None else "steps only"
+                # The parameter names are listed: without them the model called
+                # run_skill with none or with guessed names and lost a step to the error.
+                params = ", ".join(skill.meta.params) or "none"
                 lines.append(
                     f"- {skill.meta.name}: {skill.meta.description} "
-                    f"(starts on {skill.meta.url_pattern}; {code})"
+                    f"(starts on {skill.meta.url_pattern}; parameters: {params}; {code})"
                 )
             parts.append("\n".join(lines))
         if self.site_facts:
