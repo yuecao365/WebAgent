@@ -1,0 +1,11 @@
+def run(old_heading, heading):
+    goto("/cms/page/")
+    check(role="heading", name="Pages")
+    click(role="button", name="Select", row=old_heading)
+    check(role="link", name="Edit", row=old_heading)
+    click(role="link", name="Edit", row=old_heading)
+    check(role="textbox", name="Page Title *")
+    type(role="textbox", name="Page Title *", text=heading)
+    check(text=heading)
+    click(role="button", name="Save")
+    check(text="You saved the page.")

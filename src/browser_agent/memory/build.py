@@ -328,7 +328,8 @@ once. Reply by calling merge_items once.
   of the input appears in exactly one returned note.
 - Do not add anything the notes do not say, and do not drop a detail that only one
   note has. When two notes contradict each other, keep both, unmerged.
-- A note is at most two sentences and 300 characters.
+- A note is at most three sentences and 380 characters. Prefer several notes of
+  that size to one longer note.
 - A merged note keeps the most general url_pattern of its sources.
 """
 
@@ -623,7 +624,10 @@ def reflect(llm: LLMClient, episode: Episode) -> tuple[list[Note], list[str]]:
 
 
 def merge_notes(
-    llm: LLMClient, notes: dict[str, Note], system: str = MERGE_SYSTEM
+    llm: LLMClient,
+    notes: dict[str, Note],
+    system: str = MERGE_SYSTEM,
+    max_chars: int = MAX_ITEM_CHARS,
 ) -> list[tuple[Note, list[str]]]:
     """Merge notes that say the same thing. Returns each kept note with the ids it
     stands for; an id the model lost or used twice keeps its note as it was."""
@@ -643,7 +647,8 @@ def merge_notes(
             re.compile(pattern)
         except re.error:
             continue
-        if not ids or not text or not pattern or len(text) > MAX_ITEM_CHARS:
+        # A merged note that is too long is not taken; its sources stay as they were.
+        if not ids or not text or not pattern or len(text) > max_chars:
             continue
         used.update(ids)
         if len(ids) == 1:

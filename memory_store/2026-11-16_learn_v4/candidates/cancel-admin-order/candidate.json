@@ -1,0 +1,27 @@
+{
+  "template_id": 257,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 470,
+    "template_id": 257
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "id": "302"
+  },
+  "param_slots": {
+    "id": "id"
+  },
+  "other_args": [
+    {
+      "id": "303"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"id\": \"301\"} not used: a held-out task uses 301"
+  ],
+  "attempts": 1
+}

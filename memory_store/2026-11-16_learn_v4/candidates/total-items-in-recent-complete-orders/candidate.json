@@ -1,0 +1,30 @@
+{
+  "template_id": 1002,
+  "source": {
+    "run": "2026-11-16_learn_check_on",
+    "task_id": 128,
+    "template_id": 1002
+  },
+  "has_skill": true,
+  "has_code": false,
+  "source_args": {
+    "k": 2
+  },
+  "param_slots": {
+    "k": "k"
+  },
+  "other_args": [
+    {
+      "k": 1
+    },
+    {
+      "k": 3
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "the model wrote no code"
+  ],
+  "attempts": 1
+}

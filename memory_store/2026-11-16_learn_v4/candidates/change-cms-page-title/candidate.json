@@ -1,0 +1,32 @@
+{
+  "template_id": 275,
+  "source": {
+    "run": "2026-11-16_learn_check_off",
+    "task_id": 486,
+    "template_id": 275
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "old_heading": "404 Not Found",
+    "heading": "Bruh bro you clicked the wrong page"
+  },
+  "param_slots": {
+    "old_heading": "old_heading",
+    "heading": "heading"
+  },
+  "other_args": [
+    {
+      "old_heading": "Home Page",
+      "heading": "About us"
+    },
+    {
+      "old_heading": "Enable Cookies",
+      "heading": "Customer Service"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

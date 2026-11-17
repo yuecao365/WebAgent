@@ -39,6 +39,8 @@ from browser_agent.memory.library import MAX_FACT_CHARS, capped_facts
 from browser_agent.memory.store import Kind, MemoryStore
 
 CANDIDATES = "candidates"
+# The longest a site fact may be when it stands for several merged ones.
+MAX_MERGED_CHARS = 400
 LOG_FILE = "build_log.jsonl"
 
 
@@ -225,8 +227,14 @@ def remerge_facts(store: MemoryStore, llm: LLMClient, log: BuildLog, passes: int
             fact.id: Note(fact.text, fact.url_pattern, tuple(fact.source or [])) for fact in facts
         }
         try:
+            # A note that stands for several may be longer than one written from a
+            # single episode; with the usual limit the merge of five notes about one
+            # report came back too long and was not taken.
             merged = merge_notes(
-                llm.labelled(task_id=f"remerge-facts-{number}"), notes, system=CONDENSE_SYSTEM
+                llm.labelled(task_id=f"remerge-facts-{number}"),
+                notes,
+                system=CONDENSE_SYSTEM,
+                max_chars=MAX_MERGED_CHARS,
             )
         except BuildError as exc:
             log.add("merge_failed", kind="site_fact", error=str(exc))

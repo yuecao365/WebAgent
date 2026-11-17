@@ -1,0 +1,35 @@
+{
+  "template_id": 284,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 496,
+    "template_id": 284
+  },
+  "has_skill": true,
+  "has_code": false,
+  "source_args": {
+    "order": "299",
+    "service": "Federal Express",
+    "tracking": "8974568499"
+  },
+  "param_slots": {
+    "order": "order",
+    "service": "service",
+    "tracking": "tracking"
+  },
+  "other_args": [
+    {
+      "order": "125",
+      "service": "United Parcel Service",
+      "tracking": "8974568499"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "the model wrote no code",
+    "other_args {\"order\": \"65\", \"service\": \"DHL\", \"tracking\": \"8974568499\"} not used: a held-out task uses 65",
+    "first attempt refused: the code carries literal values of the task: Federal Express"
+  ],
+  "attempts": 2
+}

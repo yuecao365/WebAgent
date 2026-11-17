@@ -1,0 +1,29 @@
+{
+  "template_id": 271,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 709,
+    "template_id": 271
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "report_type": "orders",
+    "start_date": "May 1, 2021",
+    "end_date": "March 31, 2022"
+  },
+  "param_slots": {
+    "report_type": "type",
+    "start_date": "start_date",
+    "end_date": "end_date"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"report_type\": \"tax\", \"start_date\": \"May 1, 2021\", \"end_date\": \"March 31, 2022\"} not used: not shown on the episode's pages: May 1, 2021, March 31, 2022",
+    "other_args {\"report_type\": \"invoiced\", \"start_date\": \"May 1, 2021\", \"end_date\": \"March 31, 2022\"} not used: not shown on the episode's pages: May 1, 2021, March 31, 2022",
+    "first attempt refused: skill.py of show-sales-report-date-range is not allowed: line 1: type is a name the skill may not reuse"
+  ],
+  "attempts": 2
+}

@@ -1,0 +1,32 @@
+{
+  "template_id": 280,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 492,
+    "template_id": 280
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "name": "Jane Doe",
+    "message": "sorry we are out of stock, please reorder"
+  },
+  "param_slots": {
+    "name": "name",
+    "message": "message"
+  },
+  "other_args": [
+    {
+      "name": "Grace Nguyen",
+      "message": "sorry we are out of stock, please reorder"
+    },
+    {
+      "name": "Lily Potter",
+      "message": "sorry we are out of stock, please reorder"
+    }
+  ],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

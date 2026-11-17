@@ -1,0 +1,23 @@
+{
+  "template_id": 247,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 458,
+    "template_id": 247
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "action": "Reduce",
+    "amount": "$5"
+  },
+  "param_slots": {
+    "action": "action",
+    "amount": "amount"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [],
+  "attempts": 1
+}

@@ -1,0 +1,28 @@
+{
+  "template_id": 268,
+  "source": {
+    "run": "2026-11-16_learn_b2",
+    "task_id": 704,
+    "template_id": 268
+  },
+  "has_skill": true,
+  "has_code": true,
+  "source_args": {
+    "report": "sales order report",
+    "start_date": "02/01/2023",
+    "end_date": "02/28/2023"
+  },
+  "param_slots": {
+    "report": "report",
+    "start_date": "time_span",
+    "end_date": "time_span"
+  },
+  "other_args": [],
+  "rejected": [],
+  "code_problems": [],
+  "notes": [
+    "other_args {\"report\": \"Sales Tax report\", \"start_date\": \"02/01/2023\", \"end_date\": \"02/28/2023\"} not used: not shown on the episode's pages: Sales Tax report",
+    "other_args {\"report\": \"Sales Shipping report\", \"start_date\": \"02/01/2023\", \"end_date\": \"02/28/2023\"} not used: not shown on the episode's pages: Sales Shipping report"
+  ],
+  "attempts": 1
+}
