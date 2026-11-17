@@ -1,0 +1,7 @@
+2026-11-16 22:15:35 start m2_test_r1
+2026-11-16 23:08:13 end m2_test_r1 exit 0 32 successes
+2026-11-16 23:08:13 start m2high_test_r1
+2026-11-16 23:15:08 end m2high_test_r1 exit 0 3 successes
+2026-11-16 23:15:08 start m1_test_r2
+2026-11-16 23:15:25 end m1_test_r2 exit 1 0 successes
+2026-11-16 23:15:25 queue stopped: m1_test_r2 exited with 1

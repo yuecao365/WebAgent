@@ -1,0 +1,10 @@
+2026-11-16 23:55:14 waiting: 3069 MB free, another run is in progress
+2026-11-16 23:56:16 3779 MB free before m2high_test_r1b
+2026-11-16 23:56:16 start m2high_test_r1b
+2026-11-17 01:05:12 end m2high_test_r1b exit 0 39 successes
+2026-11-17 01:05:14 waiting: 2427 MB free, another run is in progress
+2026-11-17 01:06:17 waiting: 2275 MB free, another run is in progress
+2026-11-17 01:07:18 6214 MB free before probe_m2_r1
+2026-11-17 01:07:19 start probe_m2_r1
+2026-11-17 01:29:45 end probe_m2_r1 exit 0 3 successes
+2026-11-17 01:29:46 queue done

@@ -1,6 +1,6 @@
 """The tables of the memory experiment, from the run directories.
 
-    uv run python scripts/memory_arms_report.py --arms configs/memory_arms.json
+    uv run python scripts/memory_arms_report.py --arms results/memory_arms.json
 
 The arms file names the runs of every arm:
 
@@ -11,14 +11,16 @@ The arms file names the runs of every arm:
       "two_by_two": {"memory off": {"effort low": "none", "effort high": "C"},
                      "memory on":  {"effort low": "M2",   "effort high": "M2-high"}},
       "causes": "results/memory_arms_causes.json",
-      "failure_labels": "results/memory_arms_failures.json"
+      "failure_labels": "results/memory_arms_failures.json",
+      "replay_labels": "results/memory_arms_replays.json"
     }
 
 "causes" holds one line per broken task, read from its trace:
 {"<arm>": {"<task id>": "<cause>"}}. "failure_labels" holds reviewed failure classes
 per arm: {"<arm>": {"<task id>": {"class": ..., "cause": ...}}}. Both are optional;
 without them a broken task says "not reviewed" and failures get the class that can be
-told from the record alone.
+told from the record alone. "replay_labels" says, for every task where skill code ran
+through and the task still failed, where the fault lies: {"<arm>": {"<task id>": ...}}.
 """
 
 from __future__ import annotations
@@ -63,12 +65,30 @@ def noise_note(arms: dict[str, Arm], base_name: str) -> str:
         parts.append(f"One run each: {', '.join(single)}.")
     if several:
         parts.append(f"Several runs: {', '.join(several)}.")
-    parts.append(
-        f"The {len(successes)} runs of {base_name} alone range from {low:.0f} to {high:.0f} of "
-        f"{baseline['tasks']} tasks, a difference of {high - low:.0f}. A difference of that "
-        "size between two arms is within noise and is not an improvement or a loss."
-    )
+    if len(successes) == 1:
+        # One run of the baseline says nothing about how far its runs lie apart.
+        parts.append(
+            f"{base_name} was run once on these {baseline['tasks']} tasks too, so the "
+            "run-to-run spread on them was not measured; no difference here can be told "
+            "from noise."
+        )
+    else:
+        parts.append(
+            f"The {len(successes)} runs of {base_name} alone range from {low:.0f} to "
+            f"{high:.0f} of {baseline['tasks']} tasks, a difference of {high - low:.0f}. A "
+            "difference of that size between two arms is within noise and is not an "
+            "improvement or a loss."
+        )
     return "> " + " ".join(parts) + "\n"
+
+
+def replay_notes(labels: dict[str, dict[str, str]]) -> str:
+    """Where the fault lies in every task whose skill code ran through and that failed."""
+    lines = ["Skill code ran through and the task failed, from the traces:", ""]
+    for arm, tasks in labels.items():
+        for task, label in tasks.items():
+            lines.append(f"- {arm} task {task}: {label}")
+    return "\n".join(lines) + "\n"
 
 
 def two_by_two(arms: dict[str, Arm], layout: dict[str, dict[str, str]]) -> str:
@@ -106,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     base_name = config.get("baseline", "none")
     causes = _optional(config.get("causes"))
     labels = _optional(config.get("failure_labels"))
+    replays = _optional(config.get("replay_labels"))
 
     for task_set in ("test", "probe"):
         named = config.get(task_set) or {}
@@ -130,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
         if task_set == "test":
             print("## 4. Skills\n")
             print(skills_table(dirs))
+            if replays:
+                print(replay_notes(replays))
             print(note)
             layout = config.get("two_by_two")
             if layout:

@@ -1,0 +1,16 @@
+12 tasks, 6 resets planned (policy when_dirty)
+C:\Users\cy200\Desktop\browswer-agent\.venv\Lib\site-packages\geocoder\uscensus.py:36: SyntaxWarning: invalid escape sequence '\d'
+  match = re.search('^\d+', self.address, re.UNICODE)
+task 243: success (finished, 16 steps, 62758 tokens, $0.0058, 75s)
+task 244: success (finished, 4 steps, 11178 tokens, $0.0010, 15s)
+task 245: success (finished, 8 steps, 26428 tokens, $0.0024, 38s)
+task 112: success (finished, 15 steps, 50730 tokens, $0.0044, 56s)
+task 113: fail (finished, 11 steps, 39113 tokens, $0.0035, 52s)
+task 114: fail (finished, 16 steps, 58461 tokens, $0.0054, 102s)
+task 768: success (finished, 8 steps, 30800 tokens, $0.0029, 56s)
+task 769: success (finished, 27 steps, 123255 tokens, $0.0119, 191s)
+task 770: success (finished, 14 steps, 55702 tokens, $0.0052, 101s)
+task 453: success (finished, 13 steps, 62256 tokens, $0.0061, 100s)
+task 454: fail (stuck, 13 steps, 64833 tokens, $0.0064, 70s)
+task 455: fail (finished, 13 steps, 40939 tokens, $0.0035, 55s)
+results: C:\Users\cy200\Desktop\browswer-agent\results\2026-11-17_probe_none_r1

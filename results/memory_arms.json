@@ -1,0 +1,28 @@
+{
+  "test": {
+    "none": [
+      "results/2026-11-16_baseline_test_r1",
+      "results/2026-11-16_baseline_test_r2",
+      "results/2026-11-16_baseline_test_r3b"
+    ],
+    "M1": ["results/2026-11-16_m1_test_r1"],
+    "M2": ["results/2026-11-16_m2_test_r1"],
+    "M3": ["results/2026-11-17_m3_test_r1"],
+    "C": ["results/2026-11-16_c_test_r1"],
+    "M2-high": ["results/2026-11-16_m2high_test_r1b"]
+  },
+  "probe": {
+    "none": ["results/2026-11-17_probe_none_r1"],
+    "M2": ["results/2026-11-17_probe_m2_r1"]
+  },
+  "baseline": "none",
+  "two_by_two": {
+    "memory off": {"effort low": "none", "effort high": "C"},
+    "memory on": {"effort low": "M2", "effort high": "M2-high"}
+  },
+  "extra_pairs": [["C", "M2-high"], ["M2", "M2-high"], ["M2", "C"]],
+  "failure_arms": ["none", "M2"],
+  "causes": "results/memory_arms_causes.json",
+  "failure_labels": "results/memory_arms_failures.json",
+  "replay_labels": "results/memory_arms_replays.json"
+}

@@ -1,0 +1,60 @@
+{
+  "config": {
+    "name": "m1_test_r1",
+    "subset": "configs/subset.json",
+    "split": "test",
+    "task_ids": null,
+    "limit": null,
+    "reset": "when_dirty",
+    "headless": true,
+    "api": null,
+    "reasoning_effort": null,
+    "budgets": {
+      "max_steps": 30,
+      "max_tokens": 1000000,
+      "max_seconds": 900.0,
+      "max_usd": 2.0
+    },
+    "switches": {
+      "prune_observation": true,
+      "truncate_lists": true,
+      "diff_observation": false,
+      "multi_action": false,
+      "pages_in_history": false,
+      "verify_before_finish": false,
+      "skills": true,
+      "site_facts": false,
+      "lessons": false
+    },
+    "memory_build": "2026-11-16_learn_v4"
+  },
+  "model": "gpt-6-luna",
+  "pricing_usd_per_mtok": {
+    "input": 0.1,
+    "output": 0.5,
+    "cached_input": 0.01,
+    "cache_write": 0.125
+  },
+  "site_image": "am1n3e/webarena-verified-shopping_admin:0.1.0",
+  "git_commit": "97a8b5d",
+  "dev_response_cache": false,
+  "memory": {
+    "skills": [
+      "adjust-current-product-price@v1",
+      "count-all-reviews@v1",
+      "cancel-admin-order@v1",
+      "show-sales-report-date-range@v1",
+      "notify-customer-on-pending-order@v1",
+      "add-order-shipment-tracking@v1",
+      "count-reviews-by-term@v1",
+      "find-customer-by-phone@v1",
+      "get-latest-order-attribute@v1",
+      "total-items-in-recent-complete-orders@v1",
+      "change-cms-page-title@v2",
+      "monthly-orders-report@v2",
+      "show-sales-report@v2"
+    ],
+    "site_facts": [],
+    "lessons": []
+  }
+}

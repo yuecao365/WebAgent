@@ -1,0 +1,134 @@
+{
+  "none": {
+    "108": {
+      "class": "wrong_page_or_filter",
+      "cause": "r1 and r2: monthly Orders report with Order Status left at Any, so orders that are not complete were counted (April 10 for 9, May 8 for 5). r3b: filtered the order grid to Complete and counted the rows itself, April 8 for 9"
+    },
+    "109": {
+      "class": "wrong_page_or_filter",
+      "cause": "r1: monthly Orders report with Order Status left at Any (April 8 for 7). r3b: filtered the order grid by date but never by status, then finished with 'Monthly counts not yet tallied'"
+    },
+    "110": {
+      "class": "wrong_page_or_filter",
+      "cause": "r3b: monthly Orders report with Order Status left at Any (April 8 for 7). r2: tried to count from the order grid and reported that it shows only part of the rows"
+    },
+    "129": {
+      "class": "gave_up",
+      "cause": "r1 and r2: opened one order twice, then finished with UNKNOWN_ERROR and its own to-do as the reason, without looking at four complete orders"
+    },
+    "130": {
+      "class": "gave_up",
+      "cause": "r2 and r3b: opened order 000000230 twice from the unfiltered list, never filtered by status Complete, then finished with UNKNOWN_ERROR and its own to-do as the reason"
+    },
+    "131": {
+      "class": "gave_up",
+      "cause": "r2 and r3b: opened order 000000230 four to six times from the unfiltered list, never filtered by status Complete, then finished with UNKNOWN_ERROR"
+    },
+    "200": {
+      "class": "over_budget",
+      "cause": "All three runs: the oldest complete order is in the cut part of the list; searched it with read_page(find) ten times or more instead of sorting by date, and ended stuck"
+    },
+    "214": {
+      "class": "not_on_page",
+      "cause": "The admin review page does not expose the star rating. r1 read it on the storefront as 40 and 20 (percent) instead of 2 and 1; r2 gave up; r3b never got the review list filtered to the product and gave up"
+    },
+    "215": {
+      "class": "not_on_page",
+      "cause": "The admin review page does not expose the star rating. r2 reported that; r3b answered with ratings it could not have read and included a review that does not belong"
+    },
+    "216": {
+      "class": "not_on_page",
+      "cause": "The admin review page does not expose the star rating; all three runs reported that they could not determine it"
+    },
+    "493": {
+      "class": "action_not_done",
+      "cause": "r2 and r3b: right order (65), but after Submit Comment the site answered 'We cannot add order history' and the agent reported the error. r1: commented on order 308, not the customer's most recent pending order"
+    },
+    "705": {
+      "class": "wrong_page_or_filter",
+      "cause": "Right report, wrong start date for 'the last 45 days': 01/30 in two runs and 02/01 in one, where 01/29 is expected"
+    },
+    "706": {
+      "class": "wrong_page_or_filter",
+      "cause": "r2 and r3b: right report, wrong end date for Q1: 03/15 (today) where 03/31 is expected"
+    },
+    "711": {
+      "class": "evaluator_mismatch",
+      "cause": "All three runs showed the Product Views report for the right dates; the evaluator expects a report_type parameter that this report's form does not have"
+    },
+    "773": {
+      "class": "action_not_done",
+      "cause": "r1 finished after four steps without deleting anything. r2 and r3b deleted with the mass action (r3b deleted one other review singly); the evaluator accepts only the single-review delete request for review 351"
+    },
+    "775": {
+      "class": "action_not_done",
+      "cause": "All three runs deleted the review with the mass action; the evaluator accepts only the single-review delete request"
+    },
+    "345": {
+      "class": "gave_up",
+      "cause": "r3b: looked for the count in the review reports by customer and by product, never filtered All Reviews by date, finished with UNKNOWN_ERROR"
+    },
+    "461": {
+      "class": "action_not_done",
+      "cause": "r2: typed 29.50 and then 40.50 and saved 40.50, where 29.50 is expected"
+    },
+    "774": {
+      "class": "action_not_done",
+      "cause": "r3b: deleted one review and reported that the others were not identified"
+    }
+  },
+  "M2": {
+    "346": {
+      "class": "gave_up",
+      "cause": "loaded count-all-reviews (steps only), filtered the reviews to 2022 once, reset the filter, typed the dates again, then clicked New Review instead of Search and finished with UNKNOWN_ERROR; the expected answer is 0"
+    },
+    "214": {
+      "class": "not_on_page",
+      "cause": "never got the review list filtered to the product and gave up, as baseline r3b did; the admin review page does not expose the star rating"
+    },
+    "216": {
+      "class": "not_on_page",
+      "cause": "opened the review editor and reported that it shows no rating value"
+    },
+    "705": {
+      "class": "wrong_page_or_filter",
+      "cause": "right report, start date 01/30 where 01/29 is expected; no skill was used"
+    },
+    "108": {
+      "class": "wrong_page_or_filter",
+      "cause": "monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged"
+    },
+    "109": {
+      "class": "wrong_page_or_filter",
+      "cause": "monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged"
+    },
+    "110": {
+      "class": "wrong_page_or_filter",
+      "cause": "monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged"
+    },
+    "711": {
+      "class": "evaluator_mismatch",
+      "cause": "showed the Product Views report for the right dates; the evaluator expects a report_type parameter that this report's form does not have"
+    },
+    "200": {
+      "class": "over_budget",
+      "cause": "searched the cut order list with read_page(find) again and again; ended stuck"
+    },
+    "773": {
+      "class": "action_not_done",
+      "cause": "deleted reviews 353, 351 and 349 with the mass action; the evaluator accepts only the single-review delete requests"
+    },
+    "775": {
+      "class": "action_not_done",
+      "cause": "selected the review and finished with 'delete action not yet applied'"
+    },
+    "461": {
+      "class": "action_not_done",
+      "cause": "typed 29.50 and then 41.00 and saved 41.00: the increase was applied twice"
+    },
+    "493": {
+      "class": "action_not_done",
+      "cause": "right order (65); after Submit Comment the site answered 'We cannot add order history' and the agent reported the error"
+    }
+  }
+}

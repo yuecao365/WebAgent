@@ -187,6 +187,8 @@ Outside this project's scope; ideas that come up are added here, not built:
   more skill code passes verification (found in B3: several candidates named
   elements as the pruned page text shows them, which the locators could not resolve)
 - repairing skill code that fails a replay
+- keeping skill code only when a replay with other parameters passes too (found in
+  B7: code kept on the original replay alone returned counts with a filter left unset)
 
 ## 8. Open items
 

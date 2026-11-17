@@ -1,0 +1,28 @@
+{
+  "test": {
+    "M2": {
+      "346": "loaded count-all-reviews (steps only), filtered the reviews to 2022 once, reset the filter, typed the dates again, then clicked New Review instead of Search and finished with UNKNOWN_ERROR; the expected answer is 0"
+    },
+    "M3": {
+      "494": "opened the right order (304) and finished with NOT_FOUND_ERROR because the order names Alexander Thomas and the task says Alex Thomas; no comment was sent. Four lessons were shown on the way"
+    },
+    "C": {
+      "706": "right report and dates (01/01 to 03/31), but Date Used was changed to Last Credit Memo Created Date and Period to Month; the evaluator expects the order-created report type",
+      "774": "deleted reviews 353, 351 and 349 with the mass action; the evaluator accepts only the single-review delete requests"
+    },
+    "M2-high": {
+      "461": "loaded adjust-current-product-price (steps only), typed 29.50 and then 41.00, and saved 41.00: the increase was applied twice",
+      "706": "show-sales-report code ran through with the arguments the model passed: end date 03/15 (today) where Q1 ends 03/31",
+      "774": "deleted reviews 353, 351 and 349 with the mass action after opening 353 five times; the evaluator accepts only the single-review delete requests"
+    }
+  },
+  "probe": {
+    "M2": {
+      "112": "filtered the reviews to the product, found two, and finished with UNKNOWN_ERROR because the grid shows no star rating, without opening a review; no skill was loaded",
+      "245": "answered Merrie from the filtered grid after 5 steps without opening the reviews (Shaunte expected); no skill was loaded",
+      "453": "opened the product and clicked the Enable Product switch again and again (the same call three times in a row, three times) without saving; ended stuck",
+      "769": "updated four of the five sizes (M, XS, L, S), never opened XL, and finished with SUCCESS after 28 steps",
+      "770": "opened the configurable parent product instead of the two simple products and finished with UNKNOWN_ERROR after 7 steps"
+    }
+  }
+}

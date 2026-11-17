@@ -1,0 +1,21 @@
+{
+  "M1": {
+    "108": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "109": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "110": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "705": "before the skill: show-sales-report did what it was told; the model passed start date 01/30 where 01/29 is expected"
+  },
+  "M2": {
+    "108": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "109": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "110": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged"
+  },
+  "M3": {
+    "108": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "109": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged",
+    "110": "in the skill: monthly-orders-report code ran through and returned the counts of the Orders report with Order Status left at Any; the answer was passed on unchanged"
+  },
+  "M2-high": {
+    "706": "before the skill: show-sales-report did what it was told; the model passed end date 03/15 (today) where Q1 ends 03/31"
+  }
+}
