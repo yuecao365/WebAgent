@@ -101,7 +101,7 @@ class RunConfig(BaseModel):
 
     name: str
     subset: str = "configs/subset.json"
-    split: Literal["learn", "test"] | None = None
+    split: Literal["learn", "test", "probe"] | None = None
     task_ids: list[int] | None = None
     limit: int | None = None
     # when_dirty resets only if an earlier task may have changed the site.

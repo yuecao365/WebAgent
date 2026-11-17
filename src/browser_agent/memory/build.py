@@ -317,6 +317,22 @@ one note and keep the others as they are. Reply by calling merge_items once.
 """
 
 
+CONDENSE_SYSTEM = """\
+You get a numbered list of short notes about one web site, written separately from
+different episodes. Several describe the same page or the same feature in different
+words. Write the shortest list of notes that still says every distinct thing: put
+notes about the same page or feature together into one note that says each thing
+once. Reply by calling merge_items once.
+
+- Every note you return lists in "from" the ids of the notes it stands for. Every id
+  of the input appears in exactly one returned note.
+- Do not add anything the notes do not say, and do not drop a detail that only one
+  note has. When two notes contradict each other, keep both, unmerged.
+- A note is at most two sentences and 300 characters.
+- A merged note keeps the most general url_pattern of its sources.
+"""
+
+
 class BuildError(RuntimeError):
     """A model call did not return what was asked for."""
 
@@ -606,7 +622,9 @@ def reflect(llm: LLMClient, episode: Episode) -> tuple[list[Note], list[str]]:
     return _checked_notes(raw.get("lessons"), episode, limit=2)
 
 
-def merge_notes(llm: LLMClient, notes: dict[str, Note]) -> list[tuple[Note, list[str]]]:
+def merge_notes(
+    llm: LLMClient, notes: dict[str, Note], system: str = MERGE_SYSTEM
+) -> list[tuple[Note, list[str]]]:
     """Merge notes that say the same thing. Returns each kept note with the ids it
     stands for; an id the model lost or used twice keeps its note as it was."""
     if len(notes) < 2:
@@ -614,7 +632,7 @@ def merge_notes(llm: LLMClient, notes: dict[str, Note]) -> list[tuple[Note, list
     listing = "\n".join(
         f"{key}: {note.text} (pages: {note.url_pattern})" for key, note in notes.items()
     )
-    raw = ask(llm, MERGE_SYSTEM, listing, MERGE_ITEMS)
+    raw = ask(llm, system, listing, MERGE_ITEMS)
     merged: list[tuple[Note, list[str]]] = []
     used: set[str] = set()
     for item in raw.get("items") or []:

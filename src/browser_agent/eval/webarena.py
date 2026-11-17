@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -323,8 +323,15 @@ def build_subset(
     per_template: int = 4,
     seed: int = 0,
     max_similarity: float = 0.8,
+    exclude_templates: Collection[int] = (),
+    avoid_wording: Sequence[str] = (),
+    splits: tuple[str, str] = ("learn", "test"),
 ) -> dict[str, Any]:
     """Choose templates and tasks for the experiments, deterministically.
+
+    exclude_templates, avoid_wording and splits are for a second set drawn by the same
+    rules: templates already used are left out, a template worded nearly like one of
+    them is skipped, and the tasks get other split names (first task, the rest).
 
     1. Keep single-site shopping-admin tasks whose expected status is SUCCESS, so a
        template's tasks all exercise the same procedure.
@@ -346,6 +353,8 @@ def build_subset(
     )
     for template_id in unscorable:
         del by_template[template_id]
+    for template_id in exclude_templates:
+        by_template.pop(template_id, None)
 
     candidates: dict[str, list[int]] = defaultdict(list)
     for template_id in sorted(by_template):
@@ -356,7 +365,7 @@ def build_subset(
             candidates[types.pop()].append(template_id)
 
     chosen: list[tuple[str, int]] = []
-    taken_wording: list[str] = []
+    taken_wording: list[str] = list(avoid_wording)
     for task_type in sorted(quotas):
         order = list(candidates.get(task_type, []))
         # One generator per type, so a change in one type's candidates leaves the
@@ -395,7 +404,7 @@ def build_subset(
                 {
                     "task_id": task["task_id"],
                     "template_id": template_id,
-                    "split": "learn" if position == 0 else "test",
+                    "split": splits[0] if position == 0 else splits[1],
                     "task_type": task_type,
                     "state_changing": is_state_changing(task),
                     "intent": task["intent"],
@@ -409,6 +418,11 @@ def build_subset(
             "seed": seed,
             "max_similarity": max_similarity,
             "unscorable_templates": unscorable,
+            **(
+                {"excluded_templates": sorted(exclude_templates), "splits": list(splits)}
+                if exclude_templates or splits != ("learn", "test")
+                else {}
+            ),
         },
         "templates": templates,
         "tasks": entries,

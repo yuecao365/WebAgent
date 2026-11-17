@@ -652,3 +652,64 @@ def test_a_refused_slot_gets_a_second_try(tmp_path, cancel):
     assert candidate.code == CODE
     assert candidate.param_slots == {"order_number": "id"}
     assert "every slot must be a parameter" in provider.calls[1]["messages"][0].content
+
+
+# -- a derived build: the site facts merged again -----------------------------
+
+
+def test_facts_are_merged_again_in_a_derived_build_and_the_source_stays_as_it_was(tmp_path):
+    from browser_agent.memory.pipeline import BuildLog, derive_build, remerge_facts
+
+    source = MemoryStore.create(tmp_path / "memory_store" / "2026-01-01_a", {"name": "a"})
+    source.add(
+        "site_fact",
+        "fact-001",
+        "The Orders report is under Reports > Sales.",
+        "^/reports/",
+        [{"task_id": 1}],
+    )
+    source.add(
+        "site_fact",
+        "fact-002",
+        "Reports > Sales > Orders opens the Orders report.",
+        "^/reports/",
+        [{"task_id": 2}],
+    )
+    source.add(
+        "site_fact", "fact-003", "Reviews are under MARKETING.", "^/review/", [{"task_id": 3}]
+    )
+    source.add("lesson", "lesson-001", "Filter the grid first.", "^/sales/", [{"task_id": 4}])
+    source.write_manifest()
+    source.close()
+    merged = [
+        {"text": "The Orders report is at Reports > Sales > Orders.", "url_pattern": "^/reports/",
+         "from": ["fact-001", "fact-002"]},
+        {"text": "Reviews are under MARKETING.", "url_pattern": "^/review/", "from": ["fact-003"]},
+    ]  # fmt: skip
+    llm, provider, _, _ = make_client(tmp_path / "llm", [reply(call("merge_items", items=merged))])
+    target = tmp_path / "memory_store" / "2026-01-02_b"
+
+    store = derive_build(tmp_path / "memory_store" / "2026-01-01_a", target, "facts merged", "abc")
+    fits = remerge_facts(store, llm, BuildLog(target / "build_log.jsonl", echo=lambda line: None))
+    store.close()
+
+    assert fits
+    derived = MemoryStore.open(target)
+    assert [(i.label, i.text) for i in derived.items("site_fact")] == [
+        ("fact-003@v1", "Reviews are under MARKETING."),
+        ("fact-001@v2", "The Orders report is at Reports > Sales > Orders."),
+    ]
+    assert derived.items("site_fact")[1].source == [{"task_id": 1}, {"task_id": 2}]
+    # Lessons are untouched, and the build says where it came from.
+    assert [i.label for i in derived.items("lesson")] == ["lesson-001@v1"]
+    assert derived.provenance()["derivations"][0]["from"] == "2026-01-01_a"
+    assert derived.provenance()["name"] == "b"
+    # The build it was derived from holds what it held before.
+    original = MemoryStore.open(tmp_path / "memory_store" / "2026-01-01_a")
+    assert [i.label for i in original.items("site_fact")] == [
+        "fact-001@v1", "fact-002@v1", "fact-003@v1",
+    ]  # fmt: skip
+    assert "says each thing" in provider.calls[0]["system"]
+    assert len(provider.calls) == 1  # everything fits after one pass
+    with pytest.raises(FileExistsError):
+        derive_build(tmp_path / "memory_store" / "2026-01-01_a", target, "again", "abc")

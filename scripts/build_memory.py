@@ -18,7 +18,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from browser_agent.harness.llm import LLMClient, Pricing, client_from_env
-from browser_agent.memory.pipeline import BuildConfig, build_dir, induce
+from browser_agent.memory.pipeline import (
+    LOG_FILE,
+    BuildConfig,
+    BuildLog,
+    build_dir,
+    derive_build,
+    git_commit,
+    induce,
+    remerge_facts,
+)
 
 
 def client(config: BuildConfig, root: Path) -> LLMClient:
@@ -39,8 +48,12 @@ def client(config: BuildConfig, root: Path) -> LLMClient:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--stage", choices=["induce", "verify"], required=True)
-    parser.add_argument("--build", type=Path, help="for verify: the build directory to continue")
+    parser.add_argument("--stage", choices=["induce", "verify", "remerge-facts"], required=True)
+    parser.add_argument(
+        "--build",
+        type=Path,
+        help="verify: the build to continue; remerge-facts: the build to derive from",
+    )
     args = parser.parse_args(argv)
     root = Path.cwd()
     load_dotenv(root / ".env")
@@ -49,6 +62,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "induce":
         store = induce(config, root, llm, build_dir(root, config.name))
         print(f"build: {store.root}")
+    elif args.stage == "remerge-facts":
+        if args.build is None:
+            parser.error("--stage remerge-facts needs --build, the build to derive from")
+        target = build_dir(root, config.name)
+        store = derive_build(
+            args.build,
+            target,
+            "site facts merged again so that all of them fit under the prefix cap",
+            git_commit(root),
+        )
+        fits = remerge_facts(store, llm, BuildLog(target / LOG_FILE))
+        store.close()
+        print(f"build: {target}; all site facts fit under the cap: {fits}")
     else:
         from browser_agent.memory.verify import verify_build
 

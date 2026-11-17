@@ -14,6 +14,7 @@ which episode each item came from, what was refused and why.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from collections.abc import Callable
 from datetime import datetime
@@ -24,6 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 from browser_agent.harness.llm import LLMClient
 from browser_agent.memory.build import (
+    CONDENSE_SYSTEM,
     BuildError,
     Candidate,
     Note,
@@ -33,6 +35,7 @@ from browser_agent.memory.build import (
     reflect,
 )
 from browser_agent.memory.episodes import Episode, failures, load_episodes, shortest_successes
+from browser_agent.memory.library import MAX_FACT_CHARS, capped_facts
 from browser_agent.memory.store import Kind, MemoryStore
 
 CANDIDATES = "candidates"
@@ -163,6 +166,13 @@ def _store_notes(
     except BuildError as exc:
         log.add("merge_failed", kind=kind, error=str(exc))
         return
+    _apply_merge(store, kind, merged, log)
+
+
+def _apply_merge(
+    store: MemoryStore, kind: Kind, merged: list[tuple[Note, list[str]]], log: BuildLog
+) -> None:
+    """A merged note becomes a new version of its first source; the others are retired."""
     for note, ids in merged:
         if len(ids) == 1:
             continue
@@ -174,6 +184,62 @@ def _store_notes(
         for other in others:
             store.retire(kind, other, f"merged into {keep}")
         log.add("merged", kind=kind, into=keep, ids=ids, text=note.text)
+
+
+def derive_build(source: Path, target: Path, why: str, code_commit: str | None) -> MemoryStore:
+    """Copy a build into a new directory and open the copy for writing.
+
+    A build that runs have used is not changed afterwards: what those runs saw must
+    stay what the build holds. A change to memory therefore goes into a derived
+    build, which starts as a copy and then gets new versions of its own.
+    """
+    if target.exists():
+        raise FileExistsError(f"{target} exists; a new build gets a new directory")
+    shutil.copytree(source, target)
+    path = target / "provenance.json"
+    provenance = json.loads(path.read_text(encoding="utf-8"))
+    provenance["name"] = target.name.split("_", 1)[-1]
+    provenance.setdefault("derivations", []).append(
+        {
+            "from": source.name,
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "why": why,
+            "code_commit": code_commit,
+        }
+    )
+    path.write_text(json.dumps(provenance, indent=2, ensure_ascii=False), encoding="utf-8")
+    return MemoryStore.open(target, read_only=False)
+
+
+def remerge_facts(store: MemoryStore, llm: LLMClient, log: BuildLog, passes: int = 2) -> bool:
+    """Merge the site facts again until all of them fit under the prefix cap.
+
+    Returns whether they fit. Each pass is one model call; a pass that merges nothing
+    ends the attempt.
+    """
+    for number in range(1, passes + 1):
+        facts = store.items("site_fact")
+        if len(capped_facts(facts)) == len(facts) and number > 1:
+            break
+        notes = {
+            fact.id: Note(fact.text, fact.url_pattern, tuple(fact.source or [])) for fact in facts
+        }
+        try:
+            merged = merge_notes(
+                llm.labelled(task_id=f"remerge-facts-{number}"), notes, system=CONDENSE_SYSTEM
+            )
+        except BuildError as exc:
+            log.add("merge_failed", kind="site_fact", error=str(exc))
+            break
+        if all(len(ids) == 1 for _, ids in merged):
+            break
+        _apply_merge(store, "site_fact", merged, log)
+    facts = store.items("site_fact")
+    chars = sum(len(fact.text) + len(fact.url_pattern) + 12 for fact in facts)
+    fits = len(capped_facts(facts)) == len(facts)
+    log.add("facts_remerged", facts=len(facts), chars=chars, cap=MAX_FACT_CHARS, all_fit=fits)
+    store.write_manifest()
+    return fits
 
 
 def induce(config: BuildConfig, root: Path, llm: LLMClient, build: Path) -> MemoryStore:

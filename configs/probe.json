@@ -1,0 +1,176 @@
+{
+  "site": "shopping_admin",
+  "rules": {
+    "quotas": {
+      "retrieve": 2,
+      "mutate": 2
+    },
+    "per_template": 3,
+    "seed": 1,
+    "max_similarity": 0.8,
+    "unscorable_templates": [
+      253
+    ],
+    "excluded_templates": [
+      246,
+      247,
+      248,
+      249,
+      257,
+      268,
+      270,
+      271,
+      275,
+      280,
+      284,
+      288,
+      364,
+      366,
+      1002
+    ],
+    "splits": [
+      "probe",
+      "probe"
+    ]
+  },
+  "templates": [
+    {
+      "template_id": 241,
+      "task_type": "mutate",
+      "intent_template": "{{arrival_phrase}}, {{update_phrase}}",
+      "task_ids": [
+        768,
+        769,
+        770
+      ]
+    },
+    {
+      "template_id": 242,
+      "task_type": "mutate",
+      "intent_template": "Disable {{product}} from the site, they are facing some quality issues.",
+      "task_ids": [
+        453,
+        454,
+        455
+      ]
+    },
+    {
+      "template_id": 244,
+      "task_type": "retrieve",
+      "intent_template": "Get the {{information}} of the customer who is the most unhappy with {{product}}",
+      "task_ids": [
+        243,
+        244,
+        245
+      ]
+    },
+    {
+      "template_id": 245,
+      "task_type": "retrieve",
+      "intent_template": "Return the customer nickname(s) who gave a rating of 3 stars or below for {{product}}",
+      "task_ids": [
+        112,
+        113,
+        114
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": 768,
+      "template_id": 241,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "5 blue Cronus yoga pants with size 33 arrived, update the stock"
+    },
+    {
+      "task_id": 769,
+      "template_id": 241,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "We've received 378 brown Aero daily fitness tee in every size, please update the inventory"
+    },
+    {
+      "task_id": 770,
+      "template_id": 241,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "We've received 12 white Cora parachute pant of size 28 and 56 blue of size 29, update the inventory"
+    },
+    {
+      "task_id": 453,
+      "template_id": 242,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "Disable Teton pullover hoodie from the site, they are facing some quality issues."
+    },
+    {
+      "task_id": 454,
+      "template_id": 242,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "Disable Ryker Tee Crew Neck from the site, they are facing some quality issues."
+    },
+    {
+      "task_id": 455,
+      "template_id": 242,
+      "split": "probe",
+      "task_type": "mutate",
+      "state_changing": true,
+      "intent": "Disable Helios Endurance Tank from the site, they are facing some quality issues."
+    },
+    {
+      "task_id": 243,
+      "template_id": 244,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Get the email address of the customer who is the most unhappy with Circe fleece"
+    },
+    {
+      "task_id": 244,
+      "template_id": 244,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Get the email address of the customer who is the most unhappy with Olivia zip jacket"
+    },
+    {
+      "task_id": 245,
+      "template_id": 244,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Get the name of the customer who is the most unhappy with Antonia racer tank"
+    },
+    {
+      "task_id": 112,
+      "template_id": 245,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Return the customer nickname(s) who gave a rating of 3 stars or below for Circe fleece"
+    },
+    {
+      "task_id": 113,
+      "template_id": 245,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Return the customer nickname(s) who gave a rating of 3 stars or below for Olivia zip jacket"
+    },
+    {
+      "task_id": 114,
+      "template_id": 245,
+      "split": "probe",
+      "task_type": "retrieve",
+      "state_changing": false,
+      "intent": "Return the customer nickname(s) who gave a rating of 3 stars or below for Antonia racer tank"
+    }
+  ]
+}
