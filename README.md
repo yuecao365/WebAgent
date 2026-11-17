@@ -60,10 +60,10 @@ efficiency and failure classes, are in
 
 - **Reasoning effort was the biggest lever.** It lifted success by 15 points at
   almost no extra cost per successful task.
-- **Skills compound with reasoning.** On their own they stayed within noise. On top
-  of higher reasoning they added two more tasks and broke none.
+- **Skills added two tasks on top of higher reasoning, within run-to-run noise.**
+  On their own they also stayed within noise.
 - **Memory has failure modes, and they are measured here:**
-  - lessons from failed runs distracted the model and lowered success;
+  - lessons from failed runs did not help (29 vs 32, within noise);
   - one skill copied a lucky success, a run that was scored correct without setting
     a needed filter, and replayed it with wrong results;
   - on task types never learned from, the memory agent did worse (3/12 vs 8/12).
