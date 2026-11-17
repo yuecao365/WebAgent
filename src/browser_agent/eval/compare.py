@@ -16,6 +16,15 @@ broken            baseline in at least two thirds, the arm in at most a third
 stabilized        baseline sometimes but not always, the arm always
 unchanged         none of the three
 A task can be both fixed and stabilized (baseline 1 of 3, arm 3 of 3).
+
+An arm that was run only once is compared more strictly, because one run cannot tell a
+change from chance where the baseline itself goes both ways:
+
+fixed             baseline never succeeded, the arm's one run did
+broken            baseline always succeeded, the arm's one run did not
+mixed             baseline sometimes succeeded: whatever the arm's run did there is
+                  within what the baseline does on its own
+unchanged         baseline always or never succeeded, and the arm's run did the same
 """
 
 from __future__ import annotations
@@ -136,13 +145,19 @@ def arms_table(arms: Sequence[Arm]) -> str:
         row = arm_summary(arm)
         stats = row["spread"]
 
-        def cell(key: str, fmt: str, stats: Mapping[str, Any] = stats) -> str:
+        def cell(
+            key: str, fmt: str, stats: Mapping[str, Any] = stats, runs: int = row["runs"]
+        ) -> str:
+            # One run has no spread to show.
+            if runs == 1:
+                return fmt.format(stats[key]["mean"])
             return f"{fmt.format(stats[key]['mean'])} ± {fmt.format(stats[key]['stdev'])}"
 
         per_run = ", ".join(f"{value:.0f}" for value in row["per_run"]["success"])
+        deviation = "n/a" if row["runs"] == 1 else f"{stats['success']['stdev']:.1f}"
         lines.append(
             f"| {row['arm']} | {row['runs']} | {per_run} of {row['tasks']} | "
-            f"{stats['success']['mean']:.1f} | {stats['success']['stdev']:.1f} | "
+            f"{stats['success']['mean']:.1f} | {deviation} | "
             f"{row['all_of_n']} | {row['any_of_n']} | {cell('steps', '{:.1f}')} | "
             f"{cell('model_calls', '{:.1f}')} | {cell('seconds', '{:.1f}')} | "
             f"{cell('tokens', '{:,.0f}')} | {cell('usd', '{:.4f}')} | "
@@ -159,12 +174,27 @@ def paired_outcomes(baseline: Arm, arm: Arm) -> dict[str, Any]:
     base_rate, arm_rate = baseline.rate(), arm.rate()
     base_count, arm_count = baseline.successes(), arm.successes()
     tasks = sorted(set(base_rate) & set(arm_rate))
-    groups: dict[str, list[int]] = {"fixed": [], "broken": [], "stabilized": [], "unchanged": []}
+    groups: dict[str, list[int]] = {
+        "fixed": [], "broken": [], "stabilized": [], "mixed": [], "unchanged": [],
+    }  # fmt: skip
+    single = len(arm.runs) == 1
     for task in tasks:
         before, after = base_rate[task], arm_rate[task]
-        fixed = before <= LOW and after >= HIGH
-        broken = before >= HIGH and after <= LOW
-        stabilized = 0 < before < 1 and after == 1
+        if single:
+            # One run of the arm: only the tasks the baseline always or never solved
+            # can show a change.
+            if 0 < before < 1:
+                groups["mixed"].append(task)
+                continue
+            fixed, broken, stabilized = (
+                before == 0 and after == 1,
+                before == 1 and after == 0,
+                False,
+            )
+        else:
+            fixed = before <= LOW and after >= HIGH
+            broken = before >= HIGH and after <= LOW
+            stabilized = 0 < before < 1 and after == 1
         if fixed:
             groups["fixed"].append(task)
         if broken:
@@ -187,13 +217,20 @@ def paired_table(
     pairs: Sequence[Mapping[str, Any]], causes: Mapping[str, Any] | None = None
 ) -> str:
     lines = [
-        "| Arm vs baseline | Tasks | Fixed | Broken | Stabilized | Unchanged |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Arm vs baseline | Runs | Tasks | Fixed | Broken | Stabilized | Baseline mixed | "
+        "Unchanged |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for pair in pairs:
+        base_runs, arm_runs = pair["runs"]
+        # With one run of the arm nothing can be called stabilized; with several, a
+        # mixed baseline is not set apart.
+        stabilized = "n/a" if arm_runs == 1 else str(len(pair["stabilized"]))
+        mixed = str(len(pair["mixed"])) if arm_runs == 1 else "n/a"
         lines.append(
-            f"| {pair['arm']} vs {pair['baseline']} | {pair['tasks']} | {len(pair['fixed'])} | "
-            f"{len(pair['broken'])} | {len(pair['stabilized'])} | {len(pair['unchanged'])} |"
+            f"| {pair['arm']} vs {pair['baseline']} | {arm_runs} vs {base_runs} | "
+            f"{pair['tasks']} | {len(pair['fixed'])} | {len(pair['broken'])} | {stabilized} | "
+            f"{mixed} | {len(pair['unchanged'])} |"
         )
     lines.append("")
     for pair in pairs:
@@ -210,7 +247,10 @@ def paired_table(
         lines.append(f"**{pair['arm']} vs {pair['baseline']}**")
         lines.append(f"- fixed: {listed(pair['fixed'])}")
         lines.append(f"- broken: {listed(pair['broken'])}")
-        lines.append(f"- stabilized: {listed(pair['stabilized'])}")
+        if pair["runs"][1] > 1:
+            lines.append(f"- stabilized: {listed(pair['stabilized'])}")
+        else:
+            lines.append(f"- baseline mixed (no conclusion from one run): {listed(pair['mixed'])}")
         arm_causes = (causes or {}).get(pair["arm"], {})
         for task in pair["broken"]:
             cause = arm_causes.get(str(task), "not reviewed")

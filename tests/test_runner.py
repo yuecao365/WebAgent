@@ -8,6 +8,7 @@ import subprocess
 import pytest
 from pydantic import ValidationError
 
+from browser_agent.browser.session import BrowserError
 from browser_agent.eval import runner
 from browser_agent.eval.fallbacks import TaskLog, build_ledger
 from browser_agent.eval.runner import RunConfig, new_run_dir, select_tasks, summarize
@@ -436,6 +437,23 @@ def test_a_refused_run_leaves_nothing_behind(tmp_path, monkeypatch):
     assert not (tmp_path / "results").exists()
 
 
+def run_tasks(tmp_path, monkeypatch, session, replies, count):
+    """runner.run on some tasks, with the site, the browser and the model faked."""
+    write_subset(tmp_path, count=count)
+    site = FakeSite()
+    llm, provider, _, _ = make_client(tmp_path, replies)
+    monkeypatch.setenv("BH_TELEMETRY", "0")
+    monkeypatch.setattr(runner, "ShoppingAdmin", lambda config: site)
+    monkeypatch.setattr(runner, "BrowserSession", lambda config: session)
+    monkeypatch.setattr(runner, "client_from_env", lambda results, **kwargs: llm)
+    run_dir = runner.run(RunConfig(name="x"), tmp_path, confirm_paid=True)
+    records = [
+        json.loads(line)
+        for line in (run_dir / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    return run_dir, records, provider, site
+
+
 def run_one_task(tmp_path, monkeypatch, session, replies):
     """runner.run on one task, with the site, the browser and the model faked."""
     write_subset(tmp_path, count=1)
@@ -517,3 +535,159 @@ def test_a_task_without_memory_records_nothing_about_memory(tmp_path, monkeypatc
     )
 
     assert "memory_used" not in record
+
+
+# -- a browser that is lost -------------------------------------------------------
+
+LOST = "sent 1011 (internal error); no close frame received"
+
+
+class DyingSession(FakeSession):
+    """A browser whose connection is lost: the reset between tasks fails until the
+    browser has been restarted (if a restart helps at all)."""
+
+    def __init__(self, restart_helps=True):
+        super().__init__()
+        self.dead = True
+        self.restart_helps = restart_helps
+
+    def reset_state(self, origins=()):
+        if self.dead:
+            raise BrowserError(f"Network.clearBrowserCookies failed: {LOST}")
+        super().reset_state(origins)
+
+    def restart(self):
+        super().restart()
+        self.dead = not self.restart_helps
+
+
+def test_a_browser_lost_before_a_task_is_restarted_and_the_task_runs(tmp_path, monkeypatch):
+    session = DyingSession()
+
+    record, events, _provider, _, summary = run_one_task(
+        tmp_path, monkeypatch, session, [reply(call("finish", **FINISH_OK))]
+    )
+
+    assert record["success"]
+    assert record["finish_reason"] == "finished"
+    assert record["attempts"] == 2
+    assert session.restarts == 1
+    kinds = [event["type"] for event in events]
+    assert kinds[0] == "browser_restarted"
+    assert events[0]["during"] == "task"
+    assert LOST in events[0]["reason"]
+    assert kinds.index("browser_restarted") < kinds.index("task_start")
+    assert "harness_error" not in kinds
+    assert summary["fallbacks"]["rows"]["browser_restarted"]["triggers"] == 1
+
+
+def test_a_browser_lost_during_a_task_is_restarted_and_the_task_is_run_again(tmp_path, monkeypatch):
+    """m2high_test_r1, task 214: the page could not be read any more in step 21."""
+    real_run = runner.AgentLoop.run
+    goals = []
+
+    def lose_the_browser_once(self, goal):
+        goals.append(goal)
+        if len(goals) == 1:
+            raise BrowserError(LOST)
+        return real_run(self, goal)
+
+    monkeypatch.setattr(runner.AgentLoop, "run", lose_the_browser_once)
+    session = FakeSession()
+
+    record, events, _provider, site, _ = run_one_task(
+        tmp_path, monkeypatch, session, [reply(call("finish", **FINISH_OK))]
+    )
+
+    assert record["success"]
+    assert record["attempts"] == 2
+    assert len(goals) == 2
+    assert session.restarts == 1
+    # One log holds both attempts; the task was scored once.
+    assert [event["type"] for event in events].count("browser_restarted") == 1
+    assert len(site.scored) == 1
+    # The site is reset before the second attempt: the first may have changed it.
+    assert site.site_resets == 2
+
+
+def test_a_browser_that_stays_lost_after_the_restart_is_a_harness_error(tmp_path, monkeypatch):
+    session = DyingSession(restart_helps=False)
+
+    record, events, provider, _, _ = run_one_task(tmp_path, monkeypatch, session, [])
+
+    assert record["finish_reason"] == "harness_error"
+    assert LOST in record["error"]
+    assert session.restarts == 1  # one restart, one more try, then it is recorded
+    assert [event["type"] for event in events] == ["browser_restarted", "harness_error"]
+    assert provider.calls == []
+
+
+def test_three_harness_errors_in_a_row_stop_the_run(tmp_path, monkeypatch, capsys):
+    session = DyingSession(restart_helps=False)
+
+    run_dir, records, provider, _ = run_tasks(tmp_path, monkeypatch, session, [], count=8)
+
+    # Eight tasks were selected; the run gave up after the third.
+    assert [record["finish_reason"] for record in records] == ["harness_error"] * 3
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["tasks"] == 3
+    assert summary["stopped_early"] == (
+        "3 tasks in a row ended in a harness error; the run was stopped with 5 of 8 tasks not run"
+    )
+    note = (run_dir / "STOPPED.md").read_text(encoding="utf-8")
+    assert "stopped, not a complete run" in note
+    assert LOST in note
+    assert "stopping: 3 tasks in a row ended in a harness error" in capsys.readouterr().out
+    assert provider.calls == []
+
+
+def test_harness_errors_that_are_not_in_a_row_do_not_stop_the_run(tmp_path, monkeypatch):
+    class Flaky(FakeSession):
+        """Lost before every second task, and a restart does not bring it back in time."""
+
+        def __init__(self):
+            super().__init__()
+            self.tasks = 0
+            self.failing = False
+
+        def reset_state(self, origins=()):
+            if not self.failing:
+                self.tasks += 1
+                self.failing = self.tasks % 2 == 0
+            if self.failing:
+                raise BrowserError(LOST)
+            super().reset_state(origins)
+
+        def restart(self):
+            super().restart()
+
+    session = Flaky()
+    original_run_task = runner.run_task
+
+    def run_task(*args, **kwargs):
+        try:
+            return original_run_task(*args, **kwargs)
+        finally:
+            if kwargs.get("attempt") == 2:
+                session.failing = False
+
+    monkeypatch.setattr(runner, "run_task", run_task)
+    replies = [reply(call("finish", **FINISH_OK)) for _ in range(3)]
+
+    run_dir, records, _, _ = run_tasks(tmp_path, monkeypatch, session, replies, count=6)
+
+    reasons = [record["finish_reason"] for record in records]
+    assert reasons == ["finished", "harness_error"] * 3
+    assert not (run_dir / "STOPPED.md").exists()
+
+
+def test_a_stopped_run_ends_with_an_exit_code_of_its_own(tmp_path, monkeypatch):
+    run_dir = tmp_path / "results" / "2026-01-01_x"
+    run_dir.mkdir(parents=True)
+    config = tmp_path / "x.json"
+    config.write_text(json.dumps({"name": "x"}), encoding="utf-8")
+    monkeypatch.setattr(runner, "run", lambda config, root, **kwargs: run_dir)
+
+    assert runner.main(["--config", str(config)]) == 0
+    (run_dir / "STOPPED.md").write_text("stopped", encoding="utf-8")
+    assert runner.main(["--config", str(config)]) == 2

@@ -23,8 +23,8 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from browser_agent.browser.environment import TaskStart, prepare
-from browser_agent.browser.session import BrowserConfig, BrowserSession, origin_of
+from browser_agent.browser.environment import EnvironmentFault, TaskStart, prepare
+from browser_agent.browser.session import BrowserConfig, BrowserError, BrowserSession, origin_of
 from browser_agent.context.observe import PageRenderer, ViewOptions
 from browser_agent.eval.fallbacks import ledger_markdown, run_ledger
 from browser_agent.eval.webarena import (
@@ -43,6 +43,10 @@ from browser_agent.memory.skill_api import site_path
 
 # AGENTS.md: anything larger than a smoke test needs the user's go-ahead.
 SMOKE_TASK_LIMIT = 5
+# This many tasks in a row ending in a harness error stop the run: what follows would
+# measure the broken harness, not the agent. In m2high_test_r1 a lost browser turned 41
+# tasks into harness errors in seven minutes.
+MAX_HARNESS_ERRORS_IN_A_ROW = 3
 
 
 class BudgetSettings(BaseModel):
@@ -342,11 +346,16 @@ def run_task(
     run_dir: Path,
     scheduler: ResetScheduler,
     memory: Memory | None = None,
+    attempt: int = 1,
 ) -> dict[str, Any]:
-    """Reset if needed, run and score one task; returns its record."""
+    """Reset if needed, run and score one task; returns its record.
+
+    attempt is 2 when the task is run again after the browser was lost and restarted;
+    its event log then continues the one of the first attempt.
+    """
     task = env.task(entry["task_id"])
     trace_dir = run_dir / "traces" / str(task.task_id)
-    trace_dir.mkdir(parents=True)
+    trace_dir.mkdir(parents=True, exist_ok=attempt > 1)
     state_changing = bool(entry.get("state_changing", True))
     # Leave the last task's page first. A grid saves its filters a second or two
     # after they change; a page still open could save them after the restore below.
@@ -360,7 +369,8 @@ def run_task(
         env.restore_ui_state()
     scheduler.task_started()
 
-    events = EventLog(trace_dir / "events.jsonl")
+    log_path = trace_dir / "events.jsonl"
+    events = EventLog.resume(log_path) if attempt > 1 else EventLog(log_path)
     # From here on the session reports its own fallbacks into this task's log.
     browser.notify = events.append
     # Checks the browser, repairs what the last task left and opens the start page.
@@ -444,6 +454,8 @@ def run_task(
     )
     # Only a run with memory records what of it was used; other records are unchanged.
     used = {} if memory is None else {"memory_used": memory_used(events.events)}
+    if attempt > 1:
+        used["attempts"] = attempt
     return {
         **used,
         "task_id": task.task_id,
@@ -471,6 +483,15 @@ def run_task(
         "unexpected_writes": [] if state_changing else writes,
         "error": result.error,
     }
+
+
+def _browser_lost(exc: Exception) -> bool:
+    """Whether a task died of the browser, as opposed to anything else.
+
+    An EnvironmentFault does not count: the check before the task has by then already
+    restarted the browser once and failed again.
+    """
+    return isinstance(exc, BrowserError) and not isinstance(exc, EnvironmentFault)
 
 
 def preflight(env: ShoppingAdmin) -> None:
@@ -559,32 +580,49 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
             headless=config.headless,
         )
     )
+    errors_in_a_row = 0
+    stopped: str | None = None
     with session:
         for entry in entries:
-            try:
-                record = run_task(
-                    entry, env, session, llm, config, run_dir, scheduler, memory=memory
-                )
-            except Exception as exc:
-                error = f"{type(exc).__name__}: {exc}"
-                log = run_dir / "traces" / str(entry["task_id"]) / "events.jsonl"
-                # The version goes in here too: a task stopped before its loop began
-                # has no task_start to carry it.
-                EventLog.resume(log).append(
-                    "harness_error", error=error[:500], log_version=LOG_VERSION
-                )
-                record = {
-                    "task_id": entry["task_id"], "template_id": entry["template_id"],
-                    "split": entry["split"], "task_type": entry["task_type"],
-                    "success": False, "score": 0.0, "eval_status": "not_scored",
-                    "finish_reason": "harness_error", "forced": False, "answered": False,
-                    "steps": 0, "tokens": 0, "usage": {}, "usd": 0.0, "seconds": 0.0,
-                    "reset_seconds": 0.0, "error": error,
-                    "state_changing": bool(entry.get("state_changing", True)),
-                    "did_reset": False, "unexpected_writes": [],
-                }  # fmt: skip
-            finally:
-                session.notify = None
+            record: dict[str, Any] = {}
+            for attempt in (1, 2):
+                try:
+                    record = run_task(
+                        entry, env, session, llm, config, run_dir, scheduler,
+                        memory=memory, attempt=attempt,
+                    )  # fmt: skip
+                except Exception as exc:
+                    error = f"{type(exc).__name__}: {exc}"
+                    log = EventLog.resume(
+                        run_dir / "traces" / str(entry["task_id"]) / "events.jsonl"
+                    )
+                    if attempt == 1 and _browser_lost(exc):
+                        # The connection to the browser is gone. Start a new browser
+                        # and run the task once more from its setup; without this the
+                        # dead browser fails every task that follows.
+                        log.append("browser_restarted", reason=error[:300], during="task")
+                        try:
+                            session.restart()
+                        except Exception as failed:
+                            error = f"{error}; the browser could not be restarted: {failed}"
+                        else:
+                            continue
+                    # The version goes in here too: a task stopped before its loop
+                    # began has no task_start to carry it.
+                    log.append("harness_error", error=error[:500], log_version=LOG_VERSION)
+                    record = {
+                        "task_id": entry["task_id"], "template_id": entry["template_id"],
+                        "split": entry["split"], "task_type": entry["task_type"],
+                        "success": False, "score": 0.0, "eval_status": "not_scored",
+                        "finish_reason": "harness_error", "forced": False, "answered": False,
+                        "steps": 0, "tokens": 0, "usage": {}, "usd": 0.0, "seconds": 0.0,
+                        "reset_seconds": 0.0, "error": error,
+                        "state_changing": bool(entry.get("state_changing", True)),
+                        "did_reset": False, "unexpected_writes": [],
+                    }  # fmt: skip
+                finally:
+                    session.notify = None
+                break
             records.append(record)
             with (run_dir / "records.jsonl").open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -597,9 +635,27 @@ def run(config: RunConfig, root: Path, confirm_paid: bool = False, dev_cache: bo
             if record["finish_reason"] == "spend_cap":
                 print("stopping: the BUDGET_USD cap would be exceeded", flush=True)
                 break
+            errors_in_a_row = (
+                errors_in_a_row + 1 if record["finish_reason"] == "harness_error" else 0
+            )
+            if errors_in_a_row >= MAX_HARNESS_ERRORS_IN_A_ROW:
+                stopped = (
+                    f"{errors_in_a_row} tasks in a row ended in a harness error; the run was "
+                    f"stopped with {len(entries) - len(records)} of {len(entries)} tasks not run"
+                )
+                print(f"stopping: {stopped}", flush=True)
+                break
 
     summary = summarize(records)
     summary["fallbacks"] = run_ledger(run_dir)
+    if stopped is not None:
+        # An incomplete run is not a sample; the note keeps it out of tables by hand.
+        summary["stopped_early"] = stopped
+        (run_dir / "STOPPED.md").write_text(
+            f"# {run_dir.name}: stopped, not a complete run\n\n{stopped[0].upper()}{stopped[1:]}.\n"
+            f"Last error: {records[-1].get('error')}\n",
+            encoding="utf-8",
+        )
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (run_dir / "summary.md").write_text(
         summary_markdown(run_dir.name, llm.model, summary, records), encoding="utf-8"
@@ -626,7 +682,9 @@ def main(argv: list[str] | None = None) -> int:
     config = RunConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
     run_dir = run(config, Path.cwd(), confirm_paid=args.confirm_paid, dev_cache=args.dev_cache)
     print(f"results: {run_dir}")
-    return 0
+    # A run that was stopped early says so with its exit code, so that a queue of
+    # runs does not go on after it.
+    return 2 if (run_dir / "STOPPED.md").exists() else 0
 
 
 if __name__ == "__main__":

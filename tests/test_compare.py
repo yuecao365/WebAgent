@@ -107,7 +107,7 @@ def test_the_paired_table_lists_the_tasks_and_a_cause_for_each_broken_one():
         [paired_outcomes(NONE, MEMORY)], {"M2": {"5": "ran a skill on the wrong page"}}
     )
 
-    assert "| M2 vs none | 6 | 2 | 1 | 2 | 2 |" in text
+    assert "| M2 vs none | 3 vs 3 | 6 | 2 | 1 | 2 | n/a | 2 |" in text
     assert "- fixed: 2 (0/3 → 2/3), 4 (1/3 → 3/3)" in text
     assert "- broken: 5 (3/3 → 1/3)" in text
     assert "  - broken 5: ran a skill on the wrong page" in text
@@ -240,3 +240,44 @@ def test_the_cost_of_building_memory_is_summed_from_the_spend_log(tmp_path):
     # Task runs are per-task cost, not part of building memory.
     assert set(builds) == {"learn_v3", "learn_v1"}
     assert "| All builds | 4 | 0.0062 | |" in build_cost_table(builds)
+
+
+def test_an_arm_run_once_shows_a_change_only_where_the_baseline_never_varies():
+    """none: task 1 and 5 always, task 2 never, tasks 3, 4 and 6 sometimes."""
+    once = arm("M1", [N, Y, N, Y, N, N])
+
+    pair = paired_outcomes(NONE, once)
+
+    assert pair["fixed"] == [2]  # never before, solved in the one run
+    assert pair["broken"] == [1, 5]  # always before, failed in the one run
+    # Where the baseline goes both ways, one run of the arm shows nothing.
+    assert pair["mixed"] == [3, 4, 6]
+    assert pair["stabilized"] == []
+    assert pair["unchanged"] == []
+    text = paired_table([pair])
+    assert "| M1 vs none | 1 vs 3 | 6 | 1 | 2 | n/a | 3 | 0 |" in text
+    assert "- baseline mixed (no conclusion from one run): 3 (2/3 → 0/1), 4 (1/3 → 1/1)" in text
+    assert "stabilized" not in text.split("**M1 vs none**")[1]
+
+
+def test_two_arms_run_once_each_are_compared_task_by_task():
+    control = arm("C", [Y, Y, N, N])
+    memory = arm("M2-high", [Y, N, Y, N])
+
+    pair = paired_outcomes(control, memory)
+
+    assert (pair["fixed"], pair["broken"], pair["unchanged"], pair["mixed"]) == (
+        [3],
+        [2],
+        [1, 4],
+        [],
+    )
+
+
+def test_a_single_run_is_shown_without_a_spread():
+    once = arm("M1", [Y, Y, N, Y, N, N])
+
+    text = arms_table([NONE, once])
+
+    assert "| M1 | 1 | 3 of 6 | 3.0 | n/a | 3 | 3 | 5.0 | 5.0 | 50.0 | 1,000 | 0.0020 |" in text
+    assert "| none | 3 | 3, 3, 4 of 6 | 3.3 | 0.6 |" in text
