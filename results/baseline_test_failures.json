@@ -1,42 +1,66 @@
 {
   "108": {
     "class": "wrong_page_or_filter",
-    "cause": "Used the monthly Orders report with Order Status left at Any, so orders that are not complete were counted (April 10 for 9, May 8 for 5)"
+    "cause": "r1 and r2: monthly Orders report with Order Status left at Any, so orders that are not complete were counted (April 10 for 9, May 8 for 5). r3b: filtered the order grid to Complete and counted the rows itself, April 8 for 9"
+  },
+  "109": {
+    "class": "wrong_page_or_filter",
+    "cause": "r1: monthly Orders report with Order Status left at Any (April 8 for 7). r3b: filtered the order grid by date but never by status, then finished with 'Monthly counts not yet tallied'"
+  },
+  "110": {
+    "class": "wrong_page_or_filter",
+    "cause": "r3b: monthly Orders report with Order Status left at Any (April 8 for 7). r2: tried to count from the order grid and reported that it shows only part of the rows"
   },
   "129": {
     "class": "gave_up",
-    "cause": "Opened one order twice, then finished with UNKNOWN_ERROR and its own to-do as the reason, without looking at four complete orders"
+    "cause": "r1 and r2: opened one order twice, then finished with UNKNOWN_ERROR and its own to-do as the reason, without looking at four complete orders"
+  },
+  "130": {
+    "class": "gave_up",
+    "cause": "r2 and r3b: opened order 000000230 twice from the unfiltered list, never filtered by status Complete, then finished with UNKNOWN_ERROR and its own to-do as the reason"
+  },
+  "131": {
+    "class": "gave_up",
+    "cause": "r2 and r3b: opened order 000000230 four to six times from the unfiltered list, never filtered by status Complete, then finished with UNKNOWN_ERROR"
   },
   "200": {
     "class": "over_budget",
-    "cause": "The oldest complete order is in the cut part of the list; searched it with read_page(find) ten times instead of sorting by date, and ended stuck"
+    "cause": "All three runs: the oldest complete order is in the cut part of the list; searched it with read_page(find) ten times or more instead of sorting by date, and ended stuck"
   },
   "214": {
     "class": "not_on_page",
-    "cause": "The admin review page does not expose the star rating; one run read it on the storefront as 40 and 20 (percent) instead of 2 and 1, the other gave up"
+    "cause": "The admin review page does not expose the star rating. r1 read it on the storefront as 40 and 20 (percent) instead of 2 and 1; r2 gave up; r3b never got the review list filtered to the product and gave up"
+  },
+  "215": {
+    "class": "not_on_page",
+    "cause": "The admin review page does not expose the star rating. r2 reported that; r3b answered with ratings it could not have read and included a review that does not belong"
   },
   "216": {
     "class": "not_on_page",
-    "cause": "The admin review page does not expose the star rating; both runs reported that they could not determine it"
+    "cause": "The admin review page does not expose the star rating; all three runs reported that they could not determine it"
   },
   "493": {
-    "class": "wrong_page_or_filter",
-    "cause": "Run 1 commented on order 308, not the customer's most recent pending order (65). Run 2 used order 65, but the site answered 'We cannot add order history' and the agent reported an error"
+    "class": "action_not_done",
+    "cause": "r2 and r3b: right order (65), but after Submit Comment the site answered 'We cannot add order history' and the agent reported the error. r1: commented on order 308, not the customer's most recent pending order"
   },
   "705": {
     "class": "wrong_page_or_filter",
-    "cause": "Right report, wrong start date for 'the last 45 days': 01/30 in one run and 02/01 in the other, where 01/29 is expected"
+    "cause": "Right report, wrong start date for 'the last 45 days': 01/30 in two runs and 02/01 in one, where 01/29 is expected"
+  },
+  "706": {
+    "class": "wrong_page_or_filter",
+    "cause": "r2 and r3b: right report, wrong end date for Q1: 03/15 (today) where 03/31 is expected"
   },
   "711": {
     "class": "evaluator_mismatch",
-    "cause": "Showed the Product Views report for the right dates; the evaluator expects a report_type parameter that this report's form does not have"
+    "cause": "All three runs showed the Product Views report for the right dates; the evaluator expects a report_type parameter that this report's form does not have"
   },
   "773": {
     "class": "action_not_done",
-    "cause": "Run 1 finished after four steps without deleting anything. Run 2 deleted with the mass action; the evaluator accepts only the single-review delete request"
+    "cause": "r1 finished after four steps without deleting anything. r2 and r3b deleted with the mass action (r3b deleted one other review singly); the evaluator accepts only the single-review delete request for review 351"
   },
   "775": {
     "class": "action_not_done",
-    "cause": "Deleted the review with the mass action in both runs; the evaluator accepts only the single-review delete request"
+    "cause": "All three runs deleted the review with the mass action; the evaluator accepts only the single-review delete request"
   }
 }
