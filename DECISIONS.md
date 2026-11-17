@@ -822,3 +822,44 @@
   - 让 r3 跑完（之后的任务量的是缺陷，不是 agent）。
   - 把 r3 前 6 个有效任务并进表里（一次不完整的运行不是一个样本）。
   - 因为 711、模板 246 这类评测器只认特定请求的情况去改提示词或子集（留出集，不动）。
+
+## 2026-11-16 新标签页：关掉、把 agent 的标签页放回前台、告诉模型（A1）
+
+- **背景**：`baseline_test_r3` 里，任务 216 点了评论编辑页上的商品链接，站点在新标签页里
+  打开它，agent 的标签页变成后台标签页，之后七个任务的菜单都打不开（见上一条）。
+- **实测到的机制**（不调用模型，在本地站点上重现）：这个链接没有 `target=_blank`，是
+  `onclick="this.target='blank'"`。点击后约 0.1 秒出现一个新的 page target（`openerId` 指向
+  agent 的标签页），agent 的标签页 `document.visibilityState` 变成 `hidden`。新标签页的 URL
+  要等它的第一个响应回来才有（实测 1.7 秒，有一次 4 秒后仍为空）。关掉新标签页后 agent 的
+  标签页自动回到 `visible`；`Page.bringToFront` 在新标签页还开着时也能让它回到 `visible`。
+- **决定**：
+  - `BrowserSession.close_other_tabs()`：关掉除 agent 自己以外的所有 page target，再
+    `Page.bringToFront`，返回被关掉的每个标签页的 URL。只看类型为 `page` 的 target
+    （浏览器自带的扩展 worker 和 background page 不算）。新标签页的 URL 最多等 10 秒，
+    等不到就返回空串。
+  - `ToolExecutor` 在每个动作（click、type、goto、scroll）之后调用它。有新标签页时，工具
+    结果里多一句：“A new tab opened at <url>; it was closed. Use goto with that URL to open
+    it here.”；URL 不在任务站点内时后半句换成 “That address is outside the task's site.”；
+    没拿到 URL 时只说 “A new tab opened; it was closed.”。URL 只写一次，因为结果行最长
+    500 字符。
+  - 每个被关掉的标签页记一个 `new_tab` 事件（带 URL）。账本里多一行
+    “New tab opened by an action, closed”，恢复 = 下一步成功。
+  - 日志版本升到 3。账本里每种兜底现在记“从哪个日志版本开始有事件”（原来只有“版本 1 有
+    没有”）；版本比它旧的运行里这一行报“未记录”，不报 0。r1、r2 是版本 2，所以它们的账本
+    对 `new_tab` 报“未记录”。
+  - 认不出 agent 自己的标签页时（守护进程说没有，或它已不在 target 列表里）什么都不关，
+    抛 `BrowserError`：不知道哪个是自己的，“关掉其他的”可能把自己关掉。
+- **没有新标签页时不变**：工具结果的文字和以前逐字相同（有离线测试；A3 有逐字节的对比）。
+  多出来的开销是每个动作两次 IPC，实测约 42 毫秒。
+- **在真实浏览器上验证**（不调用模型）：通过 `ToolExecutor` 点同一类链接，结果行是
+  `Clicked [736] "Joust Duffle Bag". A new tab opened at
+  http://localhost:7780/admin/catalog/product/edit/id/1/; it was closed. Use goto with that
+  URL to open it here.`，之后页面可见、只剩一个标签页，点 SALES 菜单能展开（页面从 47 行
+  变成 58 行）——r3 里坏掉的正是这一步。
+- **放弃**：
+  - 跟着切到新标签页（agent 只在一个标签页里工作；切过去会让 ref、历史、网络记录都要
+    跟着换，而且评测只看一个标签页的轨迹没有任何好处）。
+  - 只把 agent 的标签页放回前台、不关新的（标签页会越积越多，而且它还在继续发请求）。
+  - 用 `Target.setDiscoverTargets` 的事件代替每步查询（守护进程只留最近 500 个事件，页面
+    加载一次就会溢出）。
+  - 结果里把 URL 写两遍（`goto(<url>)`）：长 URL 加上行信息会被 500 字符的上限截掉。

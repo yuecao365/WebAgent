@@ -144,6 +144,62 @@ def test_a_click_that_loads_a_page_says_where_it_led():
     )
 
 
+def clicked_a_link_that_opens_a_tab(url):
+    browser = FakeBrowser()
+    browser.element(11, tag="a")
+    browser.new_tab_links[11] = url
+    reported = []
+    tools = executor(browser, notify=lambda kind, **details: reported.append((kind, details)))
+    return browser, tools.execute("click", {"ref": 11}), reported
+
+
+def test_a_tab_opened_by_an_action_is_closed_and_the_model_is_told_where_it_led():
+    url = "http://site.test/admin/catalog/product/edit/id/1604/"
+
+    browser, outcome, reported = clicked_a_link_that_opens_a_tab(url)
+
+    assert outcome.ok
+    assert outcome.summary == (
+        f"Clicked [11]. A new tab opened at {url}; it was closed. "
+        "Use goto with that URL to open it here."
+    )
+    # The agent's own tab did not change and is the one shown again.
+    assert not outcome.navigated
+    assert browser.other_tabs == []
+    assert browser.visible
+    assert reported == [("new_tab", {"url": url})]
+
+
+def test_a_new_tab_outside_the_site_is_closed_without_offering_goto():
+    _, outcome, reported = clicked_a_link_that_opens_a_tab("https://example.com/help")
+
+    assert outcome.summary.endswith(
+        "A new tab opened at https://example.com/help; it was closed. "
+        "That address is outside the task's site."
+    )
+    assert reported == [("new_tab", {"url": "https://example.com/help"})]
+
+
+def test_a_new_tab_that_never_got_an_address_is_still_closed_and_reported():
+    browser, outcome, reported = clicked_a_link_that_opens_a_tab("")
+
+    assert outcome.summary == "Clicked [11]. A new tab opened; it was closed."
+    assert browser.other_tabs == []
+    assert reported == [("new_tab", {"url": ""})]
+
+
+def test_an_action_that_opens_no_tab_reports_nothing_and_reads_as_before():
+    browser = FakeBrowser()
+    browser.element(11)
+    reported = []
+    tools = executor(browser, notify=lambda kind, **details: reported.append(kind))
+
+    outcome = tools.execute("click", {"ref": 11})
+
+    assert outcome.summary == "Clicked [11]."
+    assert reported == []
+
+
 def test_goto_reports_the_new_page_and_is_limited_to_the_task_site():
     browser = FakeBrowser()
 

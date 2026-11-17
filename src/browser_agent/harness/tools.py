@@ -397,14 +397,42 @@ class ToolExecutor:
             message = actions.scroll(self._browser, args.direction)
         else:  # pragma: no cover - every tool is handled above
             raise ActionError(f"no handler for {type(args).__name__}")
+        new_tabs = self._close_new_tabs()
         after = self._page_state()
         navigated = after["doc"] != before["doc"]
         changes = list(after["dialogs"])
         if navigated or after["url"] != before["url"]:
             changes.append(f"Now on: {after['title']} ({after['url']})")
         return ToolOutcome(
-            True, _shorten(" ".join([message, *changes])), navigated=navigated, acted=True
+            True,
+            _shorten(" ".join([message, *new_tabs, *changes])),
+            navigated=navigated,
+            acted=True,
         )
+
+    def _close_new_tabs(self) -> list[str]:
+        """Close tabs the action opened and say, for the model, where each one led.
+
+        The agent works in one tab. A tab opened in front of it hides the agent's
+        tab, so it is closed at once and the model is told how to get to its page.
+        """
+        notes = []
+        for url in self._browser.close_other_tabs():
+            if self._notify is not None:
+                self._notify("new_tab", url=url)
+            if not url:
+                notes.append("A new tab opened; it was closed.")
+            elif origin_of(url) in self._allowed_origins:
+                notes.append(
+                    f"A new tab opened at {url}; it was closed. "
+                    "Use goto with that URL to open it here."
+                )
+            else:
+                notes.append(
+                    f"A new tab opened at {url}; it was closed. "
+                    "That address is outside the task's site."
+                )
+        return notes
 
     def _read(self, args: ReadPageArgs) -> ToolOutcome:
         if args.find is not None and args.find.strip():

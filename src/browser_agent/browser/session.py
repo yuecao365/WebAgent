@@ -36,6 +36,11 @@ _BROWSER_CANDIDATES = (
 # 5 seconds browser-harness allows a CDP call by default.
 _SLOW_CDP_TIMEOUT = 60.0
 
+# A tab that has just opened has no address until its first response arrives, which
+# takes the admin site a few seconds. It is given this long to say where it leads.
+_NEW_TAB_URL_WAIT = 10.0
+_NO_ADDRESS = ("", "about:blank")
+
 
 class BrowserError(RuntimeError):
     """The browser or the daemon could not do what was asked."""
@@ -60,6 +65,8 @@ class Browser(Protocol):
     def settle(self) -> None: ...
 
     def pending_dialog(self) -> dict[str, Any] | None: ...
+
+    def close_other_tabs(self) -> list[str]: ...
 
 
 @dataclass(frozen=True)
@@ -269,6 +276,69 @@ class BrowserSession:
         # page_info() reports an open native dialog instead of evaluating script,
         # which would hang because the dialog freezes the page's JS thread.
         return self._guard(self._bh.page_info).get("dialog")
+
+    # -- tabs --------------------------------------------------------------
+
+    def close_other_tabs(self) -> list[str]:
+        """Close every tab but the agent's and put the agent's tab back in front.
+
+        Returns the address of each tab closed ("" when it never got one). A link with
+        target=_blank, or window.open, opens a tab in front of the agent's. The agent's
+        tab is then hidden, and a hidden page is not laid out: menus stopped opening
+        for every task after one such click (baseline_test_r3).
+        """
+        own = self.own_tab()
+        if own is None:
+            # Without knowing which tab is the agent's, closing "the others" could
+            # close the agent's own.
+            raise BrowserError("the agent's tab no longer exists")
+        others = [tab for tab in self._page_targets() if tab["targetId"] != own]
+        if not others:
+            return []
+        urls = []
+        for tab in others:
+            urls.append(self._address_of(tab["targetId"]))
+            with contextlib.suppress(BrowserError):  # it may have closed itself meanwhile
+                self.cdp("Target.closeTarget", targetId=tab["targetId"])
+        self.bring_to_front()
+        return urls
+
+    def own_tab(self) -> str | None:
+        """The target id of the agent's tab, or None when that tab no longer exists."""
+        try:
+            own = self._bh.current_tab().get("targetId")
+        except Exception:
+            return None
+        return own if any(tab["targetId"] == own for tab in self._page_targets()) else None
+
+    def bring_to_front(self) -> None:
+        self.cdp("Page.bringToFront")
+
+    def is_visible(self) -> bool:
+        """Whether the agent's tab is the one shown; only a shown page is laid out."""
+        result = self.cdp(
+            "Runtime.evaluate", expression="document.visibilityState", returnByValue=True
+        )
+        return result.get("result", {}).get("value") == "visible"
+
+    def _page_targets(self) -> list[dict[str, Any]]:
+        # Extension workers and background pages are targets too; only tabs count.
+        targets = self.cdp("Target.getTargets").get("targetInfos", [])
+        return [target for target in targets if target.get("type") == "page"]
+
+    def _address_of(self, target_id: str) -> str:
+        deadline = time.monotonic() + _NEW_TAB_URL_WAIT
+        while True:
+            try:
+                info = self.cdp("Target.getTargetInfo", targetId=target_id)
+            except BrowserError:
+                return ""
+            url = info.get("targetInfo", {}).get("url", "")
+            if url not in _NO_ADDRESS:
+                return url
+            if time.monotonic() >= deadline:
+                return ""
+            time.sleep(0.1)
 
     # -- task isolation ----------------------------------------------------
 

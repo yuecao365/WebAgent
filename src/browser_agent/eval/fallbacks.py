@@ -25,8 +25,10 @@ that fails later for an unrelated reason. Only "recovered" says something about 
 fallback itself, and only about the step right after it.
 
 The score comes from the task_scored event. Logs written before that event existed
-(log version 1) take it from the run's records.jsonl instead; a few kinds were not
-logged at all then and are reported as "not logged" for such runs.
+(log version 1) take it from the run's records.jsonl instead. A kind that left no
+event in the log version of a run is reported as "not logged" for that run, never as
+zero: several kinds are logged since version 2, new tabs and the environment check
+since version 3.
 """
 
 from __future__ import annotations
@@ -51,8 +53,8 @@ class Kind:
     label: str
     # What counts as recovered, or None where the question does not apply.
     recovered: str | None = None
-    # False for kinds that leave an event only since log version 2.
-    in_v1_logs: bool = True
+    # The first log version in which this kind leaves an event.
+    since: int = 1
 
 
 KINDS: tuple[Kind, ...] = (
@@ -62,17 +64,18 @@ KINDS: tuple[Kind, ...] = (
     Kind("invalid_finish", "Invalid finish returned to the model", NEXT_STEP),
     Kind("nudge", "Reply without a tool call, nudged", NEXT_STEP),
     Kind("skipped_single_action", "Extra call skipped: one call per step"),
-    Kind("skipped_after_failure", "Call skipped after a failed call", in_v1_logs=False),
-    Kind("skipped_after_navigation", "Call skipped after a new page", in_v1_logs=False),
+    Kind("skipped_after_failure", "Call skipped after a failed call", since=2),
+    Kind("skipped_after_navigation", "Call skipped after a new page", since=2),
     # -- a tool call failed -----------------------------------------------------
     Kind("tool_error", "Tool call failed, error returned", NEXT_STEP),
     Kind("recovery", "Returned to the last stable URL", f"the return worked and {NEXT_STEP}"),
     Kind("script_click", "Clicked by script: element has no box"),
     Kind("dialog_accepted", "Native dialog accepted"),
     Kind("result_cut", "Long tool result cut"),
+    Kind("new_tab", "New tab opened by an action, closed", NEXT_STEP, 3),
     # -- the page ---------------------------------------------------------------
-    Kind("page_read_retry", "Page read retried: page busy", "the page was read", False),
-    Kind("settle_timeout", "Settle ran out of time", in_v1_logs=False),
+    Kind("page_read_retry", "Page read retried: page busy", "the page was read", 2),
+    Kind("settle_timeout", "Settle ran out of time", since=2),
     Kind("cut_list_shown", "Page shown with a cut list or table"),
     Kind(
         "cut_list_read",
@@ -88,17 +91,17 @@ KINDS: tuple[Kind, ...] = (
         "self_check",
         "Finish intercepted for a check",
         "the answer changed between the first and the second finish",
-        False,
+        2,
     ),
     # -- the model API ------------------------------------------------------------
     Kind("model_retry", "Model API call retried (429, 5xx, timeout)", "the call went through"),
-    Kind("effort_downgraded", "Reasoning effort rejected, downgraded", None, False),
-    Kind("minimal_mode", "Switched to minimal request mode", None, False),
+    Kind("effort_downgraded", "Reasoning effort rejected, downgraded", None, 2),
+    Kind("minimal_mode", "Switched to minimal request mode", None, 2),
     Kind("model_error", "Task ended by a model error"),
     Kind("model_refusal", "Task ended by a model refusal"),
     Kind("spend_cap", "Task ended by the spend cap"),
     # -- the run ------------------------------------------------------------------
-    Kind("unexpected_write", "Read-only task wrote; next task reset first", None, False),
+    Kind("unexpected_write", "Read-only task wrote; next task reset first", None, 2),
     Kind("harness_error", "Harness error ended the task"),
 )
 
@@ -153,8 +156,9 @@ def _steps(events: Sequence[dict[str, Any]]) -> list[_Step]:
 
 
 def log_version(events: Sequence[dict[str, Any]]) -> int:
-    start = next((event for event in events if event["type"] == "task_start"), {})
-    return int(start.get("log_version", 1))
+    # task_start carries it; so does the harness_error of a task that never started.
+    stamped = next((event for event in events if "log_version" in event), {})
+    return int(stamped.get("log_version", 1))
 
 
 def task_success(events: Sequence[dict[str, Any]]) -> bool | None:
@@ -255,6 +259,8 @@ def task_fallbacks(events: Sequence[dict[str, Any]]) -> list[Fired]:
                     add("page_read_retry", bool(event.get("ok")))
             elif kind == "settle_timeout":
                 add("settle_timeout")
+            elif kind == "new_tab":
+                add("new_tab", next_ok)
             elif kind == "provider_fallback":
                 if event.get("fallback") in _BY_KEY:
                     add(event["fallback"])
@@ -321,10 +327,11 @@ def build_ledger(tasks: Iterable[TaskLog]) -> dict[str, Any]:
         fired = task_fallbacks(task.events)
         if task_success(task.events) is None and task.recorded_unexpected_writes:
             fired.append(Fired("unexpected_write", 0))
-        if log_version(task.events) < 2:
-            for kind in KINDS:
-                if not kind.in_v1_logs and kind.key != "unexpected_write":
-                    rows[kind.key]["logged"] = False
+        version = log_version(task.events)
+        for kind in KINDS:
+            # An old log's unexpected writes are taken from the records instead.
+            if kind.since > version and kind.key != "unexpected_write":
+                rows[kind.key]["logged"] = False
         for key in {item.key for item in fired}:
             rows[key]["tasks"] += 1
             rows[key]["task_successes"] += success
@@ -427,5 +434,5 @@ def ledger_markdown(ledger: dict[str, Any]) -> str:
     if quiet:
         lines += ["", "Did not fire: " + "; ".join(quiet) + "."]
     if unlogged:
-        lines += ["", "Not logged in this run (log version 1): " + "; ".join(unlogged) + "."]
+        lines += ["", "Not logged in this run (older log version): " + "; ".join(unlogged) + "."]
     return "\n".join(lines) + "\n"

@@ -60,7 +60,7 @@ def test_a_plain_task_fires_nothing(tmp_path):
     events = events_of(tmp_path, [reply(call("click", ref=1)), FINISH])
 
     assert fired(events) == []
-    assert log_version(events) == 2
+    assert log_version(events) == 3
 
 
 def test_a_nudge_is_recovered_when_the_next_step_calls_a_tool(tmp_path):
@@ -240,6 +240,43 @@ def test_events_reported_from_outside_the_loop(tmp_path):
     ]
 
 
+class TabOpeningExecutor(FakeExecutor):
+    """Reports a new tab on every click, as the real executor does through notify."""
+
+    def __init__(self, log):
+        super().__init__()
+        self.log = log
+
+    def execute(self, name, arguments):
+        if name == "click":
+            self.log.append("new_tab", url="http://site.test/admin/catalog/product/edit/id/7/")
+        return super().execute(name, arguments)
+
+
+def test_a_new_tab_is_counted_and_recovered_when_the_next_step_works(tmp_path):
+    llm, _, _, _ = make_client(tmp_path, [reply(call("click", ref=1)), FINISH])
+    log = EventLog()
+    AgentLoop(llm, TabOpeningExecutor(log), log, LoopConfig()).run("Find it")
+
+    assert fired(log.events) == [("new_tab", True)]
+    assert build_ledger([TaskLog(1, log.events)])["rows"]["new_tab"]["logged"]
+
+
+def test_a_log_older_than_a_kind_reports_it_as_not_logged_not_as_zero(tmp_path):
+    """baseline_test_r1 and r2 are version 2: they could not have recorded a new tab."""
+    events = [
+        {**event, "log_version": 2} if event["type"] == "task_start" else event
+        for event in events_of(tmp_path, [FINISH])
+    ]
+
+    ledger = build_ledger([TaskLog(1, events)])
+
+    assert not ledger["rows"]["new_tab"]["logged"]
+    assert ledger["rows"]["settle_timeout"]["logged"]
+    not_logged = ledger_markdown(ledger).split("Not logged in this run")[1]
+    assert "New tab opened by an action, closed" in not_logged
+
+
 def test_a_saved_version_1_log_of_a_task_the_harness_could_not_finish():
     events = read_events(FIXTURES / "events_v1_harness_error.jsonl")
 
@@ -286,7 +323,7 @@ def test_old_logs_take_the_score_from_the_records_and_mark_what_was_not_logged()
     assert not ledger["rows"]["page_read_retry"]["logged"]
     assert ledger["rows"]["tool_error"]["logged"]
     text = ledger_markdown(ledger)
-    assert "Not logged in this run (log version 1): " in text
+    assert "Not logged in this run (older log version): " in text
     assert "Page read retried: page busy" in text.split("Not logged in this run")[1]
 
 

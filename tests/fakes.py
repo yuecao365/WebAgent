@@ -137,6 +137,11 @@ class FakeBrowser:
         self.options: dict[int, list[str]] = {}
         # refs whose click loads a new document, with the URL it leads to
         self.links: dict[int, str] = {}
+        # refs whose click opens a new tab, with the URL the tab goes to
+        self.new_tab_links: dict[int, str] = {}
+        # addresses of the tabs open besides the agent's
+        self.other_tabs: list[str] = []
+        self.visible = True
         # ref -> the value the field shows whatever was typed into it
         self.masks: dict[int, str] = {}
         self.navigate_error: str | None = None
@@ -214,6 +219,11 @@ class FakeBrowser:
             self.url = target
             self.title = "Next page"
             self.document += 1
+        opened = self.new_tab_links.get(self._last_ref or -1)
+        if opened is not None:
+            # A new tab opens in front and hides the agent's tab.
+            self.other_tabs.append(opened)
+            self.visible = False
 
     def insert_text(self, text: str) -> None:
         self.typed.append(text)
@@ -230,6 +240,12 @@ class FakeBrowser:
     def pending_dialog(self) -> dict[str, Any] | None:
         dialog, self.dialog = self.dialog, None
         return dialog
+
+    def close_other_tabs(self) -> list[str]:
+        closed, self.other_tabs = self.other_tabs, []
+        if closed:
+            self.visible = True
+        return closed
 
 
 def load_fixture(name: str) -> Any:

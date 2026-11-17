@@ -20,8 +20,10 @@ from typing import Any
 
 # Written into task_start. Version 2 added the events for fallbacks that used to
 # leave no trace (busy-page retries, settle timeouts, provider downgrades, the
-# reason a call was skipped) and the score. A log without it is version 1.
-LOG_VERSION = 2
+# reason a call was skipped) and the score. Version 3 added new_tab and the
+# environment check before a task (env_repaired, browser_restarted). A log without it
+# is version 1.
+LOG_VERSION = 3
 
 # The shape of EventLog.append, for the parts of the harness that only report.
 Notify = Callable[..., Any]
